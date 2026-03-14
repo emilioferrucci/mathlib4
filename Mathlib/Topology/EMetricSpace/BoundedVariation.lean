@@ -11,6 +11,7 @@ public import Mathlib.Topology.UniformSpace.UniformConvergenceTopology
 public import Mathlib.Topology.Instances.ENNReal.Lemmas
 public import Mathlib.Topology.Order.LeftRightLim
 public import Mathlib.Topology.Semicontinuity.Defs
+public import Mathlib.Topology.EMetricSpace.PVariation
 public import Mathlib.Tactic.Bound
 
 /-!
@@ -74,10 +75,10 @@ def LocallyBoundedVariationOn (f : α → E) (s : Set α) :=
 
 namespace eVariationOn
 
-theorem nonempty_monotone_mem {s : Set α} (hs : s.Nonempty) :
-    Nonempty { u // Monotone u ∧ ∀ i : ℕ, u i ∈ s } := by
-  obtain ⟨x, hx⟩ := hs
-  exact ⟨⟨fun _ => x, fun i j _ => le_rfl, fun _ => hx⟩⟩
+/-- The total variation is the `p`-variation at `p = 1`. -/
+theorem pVariationOn_one (f : α → E) (s : Set α) :
+    pVariationOn f s 1 = eVariationOn f s := by
+  simp [pVariationOn, eVariationOn]
 
 theorem eq_of_edist_zero_on {f f' : α → E} {s : Set α} (h : ∀ ⦃x⦄, x ∈ s → edist (f x) (f' x) = 0) :
     eVariationOn f s = eVariationOn f' s := by
@@ -331,40 +332,7 @@ theorem add_point (f : α → E) {s : Set α} {x : α} (hx : x ∈ s) (u : ℕ �
 bounds the sum of the variations along `s` and `t`. -/
 theorem add_le_union (f : α → E) {s t : Set α} (h : ∀ x ∈ s, ∀ y ∈ t, x ≤ y) :
     eVariationOn f s + eVariationOn f t ≤ eVariationOn f (s ∪ t) := by
-  by_cases hs : s = ∅
-  · simp [hs]
-  have : Nonempty { u // Monotone u ∧ ∀ i : ℕ, u i ∈ s } :=
-    nonempty_monotone_mem (nonempty_iff_ne_empty.2 hs)
-  by_cases ht : t = ∅
-  · simp [ht]
-  have : Nonempty { u // Monotone u ∧ ∀ i : ℕ, u i ∈ t } :=
-    nonempty_monotone_mem (nonempty_iff_ne_empty.2 ht)
-  refine ENNReal.iSup_add_iSup_le ?_
-  /- We start from two sequences `u` and `v` along `s` and `t` respectively, and we build a new
-    sequence `w` along `s ∪ t` by juxtaposing them. Its variation is larger than the sum of the
-    variations. -/
-  rintro ⟨n, ⟨u, hu, us⟩⟩ ⟨m, ⟨v, hv, vt⟩⟩
-  let w i := if i ≤ n then u i else v (i - (n + 1))
-  calc
-    ((∑ i ∈ Finset.range n, edist (f (u (i + 1))) (f (u i))) +
-          ∑ i ∈ Finset.range m, edist (f (v (i + 1))) (f (v i))) =
-        (∑ i ∈ Finset.range n, edist (f (w (i + 1))) (f (w i))) +
-          ∑ i ∈ Finset.range m, edist (f (w (n + 1 + i + 1))) (f (w (n + 1 + i))) := by
-      dsimp only [w]
-      congr 1
-      · grind [Finset.sum_congr]
-      · grind
-    _ = (∑ i ∈ Finset.range n, edist (f (w (i + 1))) (f (w i))) +
-          ∑ i ∈ Finset.Ico (n + 1) (n + 1 + m), edist (f (w (i + 1))) (f (w i)) := by
-      congr 1
-      rw [Finset.range_eq_Ico]
-      convert Finset.sum_Ico_add (fun i : ℕ => edist (f (w (i + 1))) (f (w i))) 0 m (n + 1)
-        using 3 <;> abel
-    _ ≤ ∑ i ∈ Finset.range (n + 1 + m), edist (f (w (i + 1))) (f (w i)) := by
-      rw [← Finset.sum_union]
-      · gcongr; grind
-      · exact Finset.disjoint_left.2 (by grind)
-    _ ≤ eVariationOn f (s ∪ t) := sum_le (by grind [Monotone]) (by grind)
+  simpa [pVariationOn_one] using pVariationOn.add_le_union (f := f) (p := 1) h
 
 /-- If a set `s` is to the left of a set `t`, and both contain the boundary point `x`, then
 the variation of `f` along `s ∪ t` is the sum of the variations. -/
