@@ -78,7 +78,7 @@ namespace eVariationOn
 /-- The total variation is the `p`-variation at `p = 1`. -/
 theorem pVariationOn_one (f : α → E) (s : Set α) :
     pVariationOn f s 1 = eVariationOn f s := by
-  simp [pVariationOn, eVariationOn]
+  simp [pVariationOn, pVariationPowOn, eVariationOn]
 
 theorem eq_of_edist_zero_on {f f' : α → E} {s : Set α} (h : ∀ ⦃x⦄, x ∈ s → edist (f x) (f' x) = 0) :
     eVariationOn f s = eVariationOn f' s := by
@@ -332,7 +332,7 @@ theorem add_point (f : α → E) {s : Set α} {x : α} (hx : x ∈ s) (u : ℕ �
 bounds the sum of the variations along `s` and `t`. -/
 theorem add_le_union (f : α → E) {s t : Set α} (h : ∀ x ∈ s, ∀ y ∈ t, x ≤ y) :
     eVariationOn f s + eVariationOn f t ≤ eVariationOn f (s ∪ t) := by
-  simpa [pVariationOn_one] using pVariationOn.add_le_union (f := f) (p := 1) h
+  simpa [pVariationPowOn, eVariationOn] using pVariationPowOn.add_le_union (f := f) (p := 1) h
 
 /-- If a set `s` is to the left of a set `t`, and both contain the boundary point `x`, then
 the variation of `f` along `s ∪ t` is the sum of the variations. -/
