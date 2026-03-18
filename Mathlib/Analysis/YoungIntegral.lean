@@ -6,6 +6,8 @@ Authors: Emilio Ferrucci
 import Mathlib.Topology.EMetricSpace.PVariation
 import Mathlib.Data.Finset.Sort
 import Mathlib.Analysis.PSeries
+import Mathlib.MeasureTheory.Measure.Stieltjes
+import Mathlib.Analysis.BoundedVariation
 
 open Filter
 open scoped Topology
@@ -529,27 +531,6 @@ theorem rsSum_go_insert_point (f g : ℝ → ℝ) (x u v w : ℝ) (l₁ l₂ : L
   simp [rsSum.go]
   ring
 
-/-- Compare Riemann-Stieltjes sums over two partitions by inserting the common refinement as an
-intermediate term and applying the triangle inequality. -/
-theorem abs_rsSum_sub_le_common_refinement (π ρ : Partition a b) (f g : ℝ → ℝ) :
-    |π.rsSum f g - ρ.rsSum f g| ≤
-      |π.rsSum f g - (common_refinement π ρ).rsSum f g| +
-        |ρ.rsSum f g - (common_refinement π ρ).rsSum f g| := by
-  let τ := common_refinement π ρ
-  calc
-    |π.rsSum f g - ρ.rsSum f g|
-      = |(π.rsSum f g - τ.rsSum f g) + (τ.rsSum f g - ρ.rsSum f g)| := by
-          congr
-          ring
-    _ ≤ |π.rsSum f g - (common_refinement π ρ).rsSum f g| +
-          |τ.rsSum f g - ρ.rsSum f g| := by
-        simpa [τ] using abs_add_le (π.rsSum f g - τ.rsSum f g) (τ.rsSum f g - ρ.rsSum f g)
-    _ = |π.rsSum f g - (common_refinement π ρ).rsSum f g| +
-          |ρ.rsSum f g - (common_refinement π ρ).rsSum f g| := by
-        simp [τ, abs_sub_comm]
-
-end Partition
-
 /-- A constant depending only on `p` and `q` in the Young-Loève estimate. -/
 noncomputable def young_loeve_constant (p q : ℝ) : ℝ :=
   2 ^ (1 / p + 1 / q) * ∑' n : ℕ, 1 / ((n + 1 : ℕ) : ℝ) ^ (1 / p + 1 / q)
@@ -577,4 +558,134 @@ theorem young_loeve_bound (f g : ℝ → ℝ) {a b p q : ℝ}
     (π : Partition a b) :
     |f a * (g b - g a) - π.rsSum f g| ≤
       young_loeve_constant p q * (young_control f g p q a b) ^ (1 / p + 1 / q) := by
+  sorry
+
+/-- Compare Riemann-Stieltjes sums over two partitions by inserting the common refinement as an
+intermediate term and applying the triangle inequality. -/
+theorem abs_rsSum_sub_le_common_refinement (π ρ : Partition a b)
+    (f g : ℝ → ℝ) :
+    |π.rsSum f g - ρ.rsSum f g| ≤
+      |π.rsSum f g - (common_refinement π ρ).rsSum f g| +
+        |ρ.rsSum f g - (common_refinement π ρ).rsSum f g| := by
+  let τ := common_refinement π ρ
+  calc
+    |π.rsSum f g - ρ.rsSum f g|
+      = |(π.rsSum f g - τ.rsSum f g) + (τ.rsSum f g - ρ.rsSum f g)| := by
+          congr
+          ring
+    _ ≤ |π.rsSum f g - (common_refinement π ρ).rsSum f g| +
+          |τ.rsSum f g - ρ.rsSum f g| := by
+        simpa [τ] using abs_add_le (π.rsSum f g - τ.rsSum f g) (τ.rsSum f g - ρ.rsSum f g)
+    _ = |π.rsSum f g - (common_refinement π ρ).rsSum f g| +
+          |ρ.rsSum f g - (common_refinement π ρ).rsSum f g| := by
+        simp [τ, abs_sub_comm]
+
+/-- If `ρ` refines `π`, then the difference between the two Riemann-Stieltjes sums is bounded by
+the maximum local Young-control factor over the intervals of `π`, times the Young-Loève constant,
+times the total control on `[a, b]`. -/
+theorem abs_rsSum_sub_le_of_refines (π ρ : Partition a b) (f g : ℝ → ℝ)
+    {p q : ℝ} (hρ : ρ.Refines π)
+    (hp : 1 ≤ p) (hq : 1 ≤ q) (hpq : 1 / p + 1 / q > 1)
+    (hf : ContinuousOn f (Set.Icc a b)) (hg : ContinuousOn g (Set.Icc a b))
+    (hfp : FinitePVariationOn f (Set.Icc a b) p) (hgq : FinitePVariationOn g (Set.Icc a b) q) :
+    |π.rsSum f g - ρ.rsSum f g| ≤
+      let ωmax : ℝ :=
+        ((List.finRange (π.pts.length - 1)).map fun i =>
+          (young_control f g p q
+            (π.pts.get ⟨i.1, by
+              exact Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)
+            ⟩)
+            (π.pts.get ⟨i.1 + 1, by
+              omega
+            ⟩)) ^ (1 / p + 1 / q - 1)).foldr max 0
+      ωmax * young_loeve_constant p q * young_control f g p q a b := by
+  sorry
+
+/-- The mesh size of a partition is the maximum length of its consecutive subintervals. -/
+noncomputable def mesh (π : Partition a b) : ℝ :=
+  ((List.finRange (π.pts.length - 1)).map fun i =>
+    π.pts.get ⟨i.1 + 1, by
+      omega
+    ⟩ - π.pts.get ⟨i.1, by
+      exact Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)
+    ⟩).foldr max 0
+
+/-- A sequence of partitions has vanishing mesh size if the mesh tends to `0`. -/
+def HasVanishingMeshSize (π : ℕ → Partition a b) : Prop :=
+  Tendsto (fun n => (π n).mesh) atTop (𝓝 0)
+
+/-- There exists at least one vanishing-mesh sequence of partitions of `[a, b]`. -/
+theorem exists_vanishing_mesh_sequence (a b : ℝ) :
+    ∃ π : ℕ → Partition a b, HasVanishingMeshSize π := by
+  sorry
+
+end Partition
+
+/-- Along any sequence of partitions of `[a, b]` with vanishing mesh size, the Riemann-Stieltjes
+sums converge under the Young hypotheses. -/
+theorem exists_tendsto_rsSum_of_vanishing_mesh {a b p q : ℝ} (f g : ℝ → ℝ)
+    (hp : 1 ≤ p) (hq : 1 ≤ q) (hpq : 1 / p + 1 / q > 1)
+    (hf : ContinuousOn f (Set.Icc a b)) (hg : ContinuousOn g (Set.Icc a b))
+    (hfp : FinitePVariationOn f (Set.Icc a b) p) (hgq : FinitePVariationOn g (Set.Icc a b) q)
+    (π : ℕ → Partition a b) (hπ : Partition.HasVanishingMeshSize π) :
+    ∃ I : ℝ, Tendsto (fun n => (π n).rsSum f g) atTop (𝓝 I) := by
+  sorry
+
+/-- Any two vanishing-mesh sequences of partitions yield the same limit of Riemann-Stieltjes
+sums under the Young hypotheses. -/
+theorem tendsto_rsSum_of_vanishing_mesh_unique {a b p q : ℝ} (f g : ℝ → ℝ)
+    (hp : 1 ≤ p) (hq : 1 ≤ q) (hpq : 1 / p + 1 / q > 1)
+    (hf : ContinuousOn f (Set.Icc a b)) (hg : ContinuousOn g (Set.Icc a b))
+    (hfp : FinitePVariationOn f (Set.Icc a b) p) (hgq : FinitePVariationOn g (Set.Icc a b) q)
+    (π ρ : ℕ → Partition a b)
+    (hπ : Partition.HasVanishingMeshSize π) (hρ : Partition.HasVanishingMeshSize ρ)
+    {I J : ℝ}
+    (hπlim : Tendsto (fun n => (π n).rsSum f g) atTop (𝓝 I))
+    (hρlim : Tendsto (fun n => (ρ n).rsSum f g) atTop (𝓝 J)) :
+    I = J := by
+  sorry
+
+/-- The Young integral is the common limit of Riemann-Stieltjes sums along any vanishing-mesh
+sequence of partitions. The definition uses an arbitrarily chosen vanishing-mesh sequence and the
+uniqueness theorem above shows that the resulting value is independent of this choice. -/
+noncomputable def youngIntegral (f g : ℝ → ℝ) (a b p q : ℝ)
+    (hp : 1 ≤ p) (hq : 1 ≤ q) (hpq : 1 / p + 1 / q > 1)
+    (hf : ContinuousOn f (Set.Icc a b)) (hg : ContinuousOn g (Set.Icc a b))
+    (hfp : FinitePVariationOn f (Set.Icc a b) p) (hgq : FinitePVariationOn g (Set.Icc a b) q) :
+    ℝ := by
+  let π : ℕ → Partition a b := Classical.choose (Partition.exists_vanishing_mesh_sequence a b)
+  let hπ : Partition.HasVanishingMeshSize π :=
+    Classical.choose_spec (Partition.exists_vanishing_mesh_sequence a b)
+  exact Classical.choose
+    (exists_tendsto_rsSum_of_vanishing_mesh f g hp hq hpq hf hg hfp hgq π hπ)
+
+/-- Every vanishing-mesh partition sequence converges to the Young integral. -/
+theorem tendsto_rsSum_nhds_youngIntegral_of_vanishing_mesh {a b p q : ℝ} (f g : ℝ → ℝ)
+    (hp : 1 ≤ p) (hq : 1 ≤ q) (hpq : 1 / p + 1 / q > 1)
+    (hf : ContinuousOn f (Set.Icc a b)) (hg : ContinuousOn g (Set.Icc a b))
+    (hfp : FinitePVariationOn f (Set.Icc a b) p) (hgq : FinitePVariationOn g (Set.Icc a b) q)
+    (π : ℕ → Partition a b) (hπ : Partition.HasVanishingMeshSize π) :
+    Tendsto (fun n => (π n).rsSum f g) atTop
+      (𝓝 (youngIntegral f g a b p q hp hq hpq hf hg hfp hgq)) := by
+  sorry
+
+/-- Integration by parts for the Young integral. -/
+theorem youngIntegral_integration_by_parts {a b p q : ℝ} (f g : ℝ → ℝ)
+    (hp : 1 ≤ p) (hq : 1 ≤ q) (hpq : 1 / p + 1 / q > 1)
+    (hf : ContinuousOn f (Set.Icc a b)) (hg : ContinuousOn g (Set.Icc a b))
+    (hfp : FinitePVariationOn f (Set.Icc a b) p) (hgq : FinitePVariationOn g (Set.Icc a b) q) :
+    youngIntegral f g a b p q hp hq hpq hf hg hfp hgq +
+      youngIntegral g f a b q p hq hp (by simpa [add_comm] using hpq) hg hf hgq hfp =
+        f b * g b - f a * g a := by
+  sorry
+
+/-- If `g` is monotone, then the Young integral against `g` agrees with the usual Stieltjes
+integral against the measure associated to `g`. -/
+theorem youngIntegral_eq_integral_stieltjes_of_monotone {a b p : ℝ} (f g : ℝ → ℝ)
+    (hp : 1 ≤ p) (hp1 : 1 / p + 1 / (1 : ℝ) > 1)
+    (hf : ContinuousOn f (Set.Icc a b)) (hg : ContinuousOn g (Set.Icc a b))
+    (hfp : FinitePVariationOn f (Set.Icc a b) p)
+    (hg1 : FinitePVariationOn g (Set.Icc a b) 1) (hmono : Monotone g) :
+    youngIntegral f g a b p 1 hp le_rfl hp1 hf hg hfp hg1 =
+      ∫ x in Set.Ioc a b, f x ∂(hmono.stieltjesFunction.measure) := by
   sorry
