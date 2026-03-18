@@ -5,6 +5,7 @@ Authors: Emilio Ferrucci
 -/
 import Mathlib.Topology.EMetricSpace.PVariation
 import Mathlib.Data.Finset.Sort
+import Mathlib.Analysis.PSeries
 
 open Filter
 open scoped Topology
@@ -137,6 +138,7 @@ lemma isControlOn_add {a b : ℝ} {ω₁ ω₂ : ℝ → ℝ → ℝ}
     simp [hdiag₁ has hsb, hdiag₂ has hsb]
   · intro x hx s t hst htb hs ht
     simpa using (hcont₁ hx hst htb hs ht).add (hcont₂ hx hst htb hs ht)
+
 
 /-- The control used in the Young-Loève estimate, obtained by summing the `p`-variation power of
 `f` and the `q`-variation power of `g` on subintervals. -/
@@ -527,11 +529,37 @@ theorem rsSum_go_insert_point (f g : ℝ → ℝ) (x u v w : ℝ) (l₁ l₂ : L
   simp [rsSum.go]
   ring
 
+/-- Compare Riemann-Stieltjes sums over two partitions by inserting the common refinement as an
+intermediate term and applying the triangle inequality. -/
+theorem abs_rsSum_sub_le_common_refinement (π ρ : Partition a b) (f g : ℝ → ℝ) :
+    |π.rsSum f g - ρ.rsSum f g| ≤
+      |π.rsSum f g - (common_refinement π ρ).rsSum f g| +
+        |ρ.rsSum f g - (common_refinement π ρ).rsSum f g| := by
+  let τ := common_refinement π ρ
+  calc
+    |π.rsSum f g - ρ.rsSum f g|
+      = |(π.rsSum f g - τ.rsSum f g) + (τ.rsSum f g - ρ.rsSum f g)| := by
+          congr
+          ring
+    _ ≤ |π.rsSum f g - (common_refinement π ρ).rsSum f g| +
+          |τ.rsSum f g - ρ.rsSum f g| := by
+        simpa [τ] using abs_add_le (π.rsSum f g - τ.rsSum f g) (τ.rsSum f g - ρ.rsSum f g)
+    _ = |π.rsSum f g - (common_refinement π ρ).rsSum f g| +
+          |ρ.rsSum f g - (common_refinement π ρ).rsSum f g| := by
+        simp [τ, abs_sub_comm]
+
 end Partition
 
 /-- A constant depending only on `p` and `q` in the Young-Loève estimate. -/
-noncomputable def young_loeve_constant (p q : ℝ) : ℝ := by
-  sorry
+noncomputable def young_loeve_constant (p q : ℝ) : ℝ :=
+  2 ^ (1 / p + 1 / q) * ∑' n : ℕ, 1 / ((n + 1 : ℕ) : ℝ) ^ (1 / p + 1 / q)
+
+lemma summable_young_loeve_constant_series {p q : ℝ} (hpq : 1 < 1 / p + 1 / q) :
+    Summable (fun n : ℕ => 1 / ((n + 1 : ℕ) : ℝ) ^ (1 / p + 1 / q)) := by
+  have hsum : Summable (fun n : ℕ => 1 / (n : ℝ) ^ (1 / p + 1 / q)) :=
+    (Real.summable_one_div_nat_rpow (p := 1 / p + 1 / q)).2 hpq
+  exact ((_root_.summable_nat_add_iff
+    (f := fun n : ℕ => 1 / (n : ℝ) ^ (1 / p + 1 / q)) 1).2 hsum)
 
 /-- If `f` and `g` are continuous on `[a, b]`, have finite `p`- and `q`-variation, and satisfy
 `1 / p + 1 / q > 1`, then the error between `f a * (g b - g a)` and every Riemann-Stieltjes sum
