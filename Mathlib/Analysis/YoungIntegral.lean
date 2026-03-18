@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Emilio Ferrucci
 -/
 import Mathlib.Topology.EMetricSpace.PVariation
+import Mathlib.Data.Finset.Sort
 
 open Filter
 open scoped Topology
@@ -15,15 +16,36 @@ We define Riemann-Stieltjes sums and prove the Young-Loève estimate, bounding t
 between a Riemann-Stieltjes sum and the trivial partition approximation in terms of the
 $p$-variation of $f$ and the $q$-variation of $g$, when $1/p + 1/q > 1$.
 
+We prove existence and uniqueness of the Young integral. The proof follows the second proof of the
+Sewing lemma, namely Lemma 4.2 in *A Course on Rough Paths* by Friz and Hairer, with the
+difference that we work with variation instead of Hölder regularity.
+
 ### Main definitions
 
 * `IsSuperadditiveOn a b ω`: interval superadditivity on the simplex over `[a, b]`.
 * `IsControlOn a b ω`: a control on `[a, b]`, i.e. a superadditive interval function that is zero
   on the diagonal and tends to `0` on collapsing intervals.
+* `young_control f g p q`: the interval function
+  `(pVariationPowOn f (Set.Icc s t) p).toReal + (pVariationPowOn g (Set.Icc s t) q).toReal`
+  used in the Young-Loève estimate.
+* `young_loeve_constant p q`: a constant depending only on `p` and `q` used in the
+  Young-Loève estimate.
 * `Partition a b`: a partition of the interval `[a, b]`.
+* `Partition.Refines π ρ`: the partition `π` is a refinement of the partition `ρ`.
+* `Partition.common_refinement π ρ`: the common refinement obtained by taking the union of the
+  partition points of `π` and `ρ` and removing duplicates.
+* `Partition.restrict π hs ht hst`: the partition obtained by restricting `π` to the subinterval
+  cut out by two of its partition points.
 * `Partition.rsSum`: Riemann-Stieltjes sum of `f dg` over a partition.
 
 ### Main statements
+
+* `not_isSuperadditiveOn_of_forall_lt_skip`: a finite combinatorial criterion forcing failure of
+  superadditivity on an interval.
+* `young_loeve_bound`: the Young-Loève estimate for a Riemann-Stieltjes sum over a partition of
+  `[a, b]`.
+* `Partition.rsSum_go_insert_point`: inserting one partition point changes the recursive
+  Riemann-Stieltjes sum by a local three-point term.
 
 -/
 
@@ -50,7 +72,7 @@ def IsControlOn (a b : ℝ) (ω : ℝ → ℝ → ℝ) : Prop :=
         Tendsto s atTop (𝓝 x) → Tendsto t atTop (𝓝 x) →
           Tendsto (fun n => ω (s n) (t n)) atTop (𝓝 0))
 
-theorem isControlOn_pVariationPowOn {E : Type*} [PseudoEMetricSpace E] (f : ℝ → E) {a b p : ℝ}
+lemma isControlOn_pVariationPowOn {E : Type*} [PseudoEMetricSpace E] (f : ℝ → E) {a b p : ℝ}
     (hp : 1 ≤ p) (hf : ContinuousOn f (Set.Icc a b))
     (hpv : FinitePVariationOn f (Set.Icc a b) p) :
     IsControlOn a b (fun s t => (pVariationPowOn f (Set.Icc s t) p).toReal) := by
@@ -97,7 +119,7 @@ theorem isControlOn_pVariationPowOn {E : Type*} [PseudoEMetricSpace E] (f : ℝ 
       (ENNReal.tendsto_toReal_zero_iff hfin).2
         (pVariationPowOn.tendsto_pVariationPowOn_of_tendsto hp hf hpv hx hst htb hs ht)
 
-theorem isControlOn_add {a b : ℝ} {ω₁ ω₂ : ℝ → ℝ → ℝ}
+lemma isControlOn_add {a b : ℝ} {ω₁ ω₂ : ℝ → ℝ → ℝ}
     (hω₁ : IsControlOn a b ω₁) (hω₂ : IsControlOn a b ω₂) :
     IsControlOn a b (fun s t => ω₁ s t + ω₂ s t) := by
   rcases hω₁ with ⟨hsuper₁, hdiag₁, hcont₁⟩
@@ -115,6 +137,21 @@ theorem isControlOn_add {a b : ℝ} {ω₁ ω₂ : ℝ → ℝ → ℝ}
     simp [hdiag₁ has hsb, hdiag₂ has hsb]
   · intro x hx s t hst htb hs ht
     simpa using (hcont₁ hx hst htb hs ht).add (hcont₂ hx hst htb hs ht)
+
+/-- The control used in the Young-Loève estimate, obtained by summing the `p`-variation power of
+`f` and the `q`-variation power of `g` on subintervals. -/
+noncomputable def young_control (f g : ℝ → ℝ) (p q : ℝ) (s t : ℝ) : ℝ :=
+  (pVariationPowOn f (Set.Icc s t) p).toReal + (pVariationPowOn g (Set.Icc s t) q).toReal
+
+/-- The interval function `young_control f g p q` is a control on `[a, b]` whenever `f` and `g`
+are continuous and have finite `p`- and `q`-variation on `[a, b]`. -/
+lemma isControlOn_young_control (f g : ℝ → ℝ) {a b p q : ℝ}
+    (hp : 1 ≤ p) (hq : 1 ≤ q)
+    (hf : ContinuousOn f (Set.Icc a b)) (hg : ContinuousOn g (Set.Icc a b))
+    (hfp : FinitePVariationOn f (Set.Icc a b) p)
+    (hgq : FinitePVariationOn g (Set.Icc a b) q) :
+    IsControlOn a b (young_control f g p q) := by
+  sorry
 
 /-- A partition of `[a, b]` is a list of real numbers that is strictly increasing,
 starts at `a`, and ends at `b`. -/
@@ -437,6 +474,30 @@ namespace Partition
 
 variable {a b : ℝ}
 
+/-- A partition `π` refines a partition `ρ` if every partition point of `ρ` is also a partition
+point of `π`. -/
+def Refines (π ρ : Partition a b) : Prop :=
+  ∀ x ∈ ρ.pts, x ∈ π.pts
+
+private theorem exists_common_refinement (π ρ : Partition a b) :
+    ∃ τ : Partition a b, τ.pts = (π.pts.toFinset ∪ ρ.pts.toFinset).sort := by
+  sorry
+
+/-- The union of two partitions of `[a, b]`, obtained by taking the union of their partition
+points and removing duplicates. -/
+noncomputable def common_refinement (π ρ : Partition a b) : Partition a b :=
+  Classical.choose (exists_common_refinement π ρ)
+
+private theorem exists_restrict (π : Partition a b) {s t : ℝ}
+    (hs : s ∈ π.pts) (ht : t ∈ π.pts) (hst : s ≤ t) :
+    ∃ σ : Partition s t, σ.pts = ({x ∈ π.pts.toFinset | x ∈ Set.Icc s t}).sort := by
+  sorry
+
+/-- Restrict a partition to the subinterval cut out by two of its partition points. -/
+noncomputable def restrict (π : Partition a b) {s t : ℝ}
+    (hs : s ∈ π.pts) (ht : t ∈ π.pts) (hst : s ≤ t) : Partition s t :=
+  Classical.choose (exists_restrict π hs ht hst)
+
 /-- Riemann-Stieltjes sum of `f dg` over a partition `π`.
 For `π.pts = [u₀, u₁, ..., uₘ]`, this is `∑ i, f(uᵢ) * (g(uᵢ₊₁) - g(uᵢ))`. -/
 noncomputable def rsSum (π : Partition a b) (f g : ℝ → ℝ) : ℝ :=
@@ -449,7 +510,7 @@ where
     | x, y :: rest => f x * (g y - g x) + go y rest
 
 /-- Split `rsSum.go` at an intermediate point `y`. -/
-theorem rsSum_go_append (f g : ℝ → ℝ) (x y : ℝ) (l₁ l₂ : List ℝ) :
+private lemma rsSum_go_append (f g : ℝ → ℝ) (x y : ℝ) (l₁ l₂ : List ℝ) :
     rsSum.go f g x (l₁ ++ y :: l₂) = rsSum.go f g x (l₁ ++ [y]) + rsSum.go f g y l₂ := by
   induction l₁ generalizing x with
   | nil =>
@@ -467,3 +528,25 @@ theorem rsSum_go_insert_point (f g : ℝ → ℝ) (x u v w : ℝ) (l₁ l₂ : L
   ring
 
 end Partition
+
+/-- A constant depending only on `p` and `q` in the Young-Loève estimate. -/
+noncomputable def young_loeve_constant (p q : ℝ) : ℝ := by
+  sorry
+
+/-- If `f` and `g` are continuous on `[a, b]`, have finite `p`- and `q`-variation, and satisfy
+`1 / p + 1 / q > 1`, then the error between `f a * (g b - g a)` and every Riemann-Stieltjes sum
+of `f dg` over partitions of `[a, b]` is controlled by `young_loeve_constant p q` times
+`(young_control f g p q a b) ^ (1 / p + 1 / q)`.
+
+This estimate differs slightly from the original Young-Loève estimate, in which the right-hand
+side is the product of the `p`-variation of `f` and the `q`-variation of `g`; see for instance
+*Multidimensional Stochastic Processes as Rough Paths* by Friz and Victoir. The formulation used
+here serves the same purpose and is more convenient to implement. -/
+theorem young_loeve_bound (f g : ℝ → ℝ) {a b p q : ℝ}
+    (hp : 1 ≤ p) (hq : 1 ≤ q) (hpq : 1 / p + 1 / q > 1)
+    (hf : ContinuousOn f (Set.Icc a b)) (hg : ContinuousOn g (Set.Icc a b))
+    (hfp : FinitePVariationOn f (Set.Icc a b) p) (hgq : FinitePVariationOn g (Set.Icc a b) q)
+    (π : Partition a b) :
+    |f a * (g b - g a) - π.rsSum f g| ≤
+      young_loeve_constant p q * (young_control f g p q a b) ^ (1 / p + 1 / q) := by
+  sorry

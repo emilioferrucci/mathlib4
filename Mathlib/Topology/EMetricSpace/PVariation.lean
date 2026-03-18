@@ -13,9 +13,7 @@ public import Mathlib.Topology.Instances.ENNReal.Lemmas
 /-!
 # Functions of finite p-variation
 
-We define the p-variation of a function and prove basic properties,
-as well as a basic helper on monotone sequences in nonempty sets, used also in the study of total
-variation.
+We define the p-variation of a function and prove basic properties.
 
 The theorem `pVariationPowOn.add_le_union` and its dependency `monotone_mem_of_nonempty` were
 originally part of `Mathlib.Topology.EMetricSpace.BoundedVariation`. Some later material in this
@@ -25,7 +23,7 @@ particular, `pVariationPowOn_Icc_reflect` parallels `eVariationOn.comp_ofDual`. 
 refactoring this in the future to reduce duplication, possibly by reorganizing or even merging the
 two files.
 
-## Main definitions
+### Main definitions
 
 * `pVariationPowOn f s p` is the p-th power of the p-variation of the function `f` on the set `s`,
   in `ℝ≥0∞`. It equals the supremum over all finite increasing sequences `u` in `s` of
@@ -34,23 +32,25 @@ two files.
   the p-variation in the literature.
 * `FinitePVariationOn f s p` registers that the p-variation of `f` on `s` is finite.
 
-## Main statements
+### Main statements
 
-* `monotone_mem_of_nonempty`: a nonempty set admits a monotone sequence valued in it.
 * `pVariationPowOn.mono`: monotonicity in the set.
 * `pVariationPowOn.add_le_union`: p-variation is super-additive on sets to the left and right of
   each other.
 * `pVariationPowOn.norm_le`: for `1 ≤ p ≤ q`, the normalized q-variation is controlled by the
   normalized p-variation:
   `(pVariationPowOn f s q) ^ (1 / q) ≤ (pVariationPowOn f s p) ^ (1 / p)`.
+* `pVariationPowOn.tendsto_pVariationPowOn_of_tendsto`: for a continuous function of finite
+  p-variation, the p-variation on intervals `[sₙ, tₙ]` tends to `0` whenever `sₙ, tₙ → x`
+  with `a ≤ sₙ ≤ tₙ ≤ b`.
 
-## Implementation notes
+### Implementation notes
 
 The exponent `p : ℝ` is required to satisfy `1 ≤ p` throughout; the concept is not useful for
 `p < 1`. The value `p = 1` recovers `eVariationOn`, both for `pVariationPowOn` and for the rooted
 `pVariationOn`.
 
-## Tags
+### Tags
 
 p-variation, bounded variation, Hölder, Young integral
 -/
@@ -77,7 +77,7 @@ noncomputable def pVariationOn (f : α → E) (s : Set α) (p : ℝ) : ℝ≥0�
 def FinitePVariationOn (f : α → E) (s : Set α) (p : ℝ) :=
   pVariationPowOn f s p ≠ ∞
 
-theorem monotone_mem_of_nonempty {s : Set α} (hs : s.Nonempty) :
+private lemma monotone_mem_of_nonempty {s : Set α} (hs : s.Nonempty) :
     Nonempty { u // Monotone u ∧ ∀ i : ℕ, u i ∈ s } := by
   obtain ⟨x, hx⟩ := hs
   exact ⟨⟨fun _ => x, fun i j _ => le_rfl, fun _ => hx⟩⟩
@@ -94,7 +94,7 @@ theorem mono (f : α → E) {s t : Set α} {p : ℝ}
 
 /-- The p-th power of the p-variation on the empty set is zero. -/
 @[simp]
-protected theorem empty (f : α → E) (p : ℝ) : pVariationPowOn f ∅ p = 0 := by
+protected lemma empty (f : α → E) (p : ℝ) : pVariationPowOn f ∅ p = 0 := by
   simp [pVariationPowOn]
 
 /-- The p-th power of the p-variation on the union of two sets `s` and `t`, with `s` to the left
@@ -189,7 +189,7 @@ theorem norm_le (f : α → E) (s : Set α) {p q : ℝ} (hp : 1 ≤ p) (hpq : p 
 
 /-- Comparison estimate for the p-variation power on a closed interval split into two closed
 subintervals. -/
-theorem Icc_split_le (f : α → E) {p : ℝ} (hp : 1 ≤ p) {s₀ s t₀ : α}
+lemma Icc_split_le (f : α → E) {p : ℝ} (hp : 1 ≤ p) {s₀ s t₀ : α}
     (hs₀s : s₀ ≤ s) (hst₀ : s ≤ t₀) :
     pVariationPowOn f (Icc s₀ t₀) p ≤
       2 ^ (p - 1) * (pVariationPowOn f (Icc s₀ s) p + pVariationPowOn f (Icc s t₀) p) := by
@@ -326,7 +326,7 @@ theorem Icc_split_le (f : α → E) {p : ℝ} (hp : 1 ≤ p) {s₀ s t₀ : α}
       refine add_le_add (add_le_add ?_ hcross) ?_
       · exact hscale _
       · exact hscale _
-    _ = C * (Sv + Sw) := by rw [hSv', hSw', ← mul_add, ← mul_add]; abel
+    _ = C * (Sv + Sw) := by rw [hSv', hSw', ← mul_add, ← mul_add]; abel_nf
     _ ≤ C * (pVariationPowOn f (Icc s₀ s) p + pVariationPowOn f (Icc s t₀) p) := by gcongr
 
 open Filter Topology in
