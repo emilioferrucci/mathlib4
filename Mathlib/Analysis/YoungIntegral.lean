@@ -43,21 +43,38 @@ open Filter Topology NNReal Set
 /-! ## Controls -/
 
 /-- A *control* is a nonneg function `ω : ℝ → ℝ → ℝ≥0` that is superadditive on ordered
-triples, `ω(s, u) + ω(u, t) ≤ ω(s, t)` for `s ≤ u ≤ t`, and continuous on the diagonal
-in the sense that `ω(s, t) → 0` as `t → s⁺`. -/
+triples, `ω(s, u) + ω(u, t) ≤ ω(s, t)` for `s ≤ u ≤ t`, vanishes on the diagonal, and is
+jointly continuous on the simplex `{(s, t) | s ≤ t}`. -/
 structure Control where
   /-- The underlying bivariate function -/
   toFun : ℝ → ℝ → ℝ≥0
   /-- Superadditivity: `ω(s, u) + ω(u, t) ≤ ω(s, t)` whenever `s ≤ u ≤ t` -/
   superadditive : ∀ {s u t : ℝ}, s ≤ u → u ≤ t → toFun s u + toFun u t ≤ toFun s t
-  /-- Diagonal continuity: `ω(s, ·) → 0` as the argument approaches `s` from the right -/
-  diag_cont : ∀ s : ℝ, Tendsto (toFun s) (𝓝[Ioi s] s) (𝓝 0)
+  /-- Vanishes on the diagonal: `ω(s, s) = 0` -/
+  zero_diag : ∀ s : ℝ, toFun s s = 0
+  /-- Joint continuity on the simplex `{(s, t) | s ≤ t}` -/
+  cont : ContinuousOn (fun p : ℝ × ℝ => toFun p.1 p.2) {p | p.1 ≤ p.2}
 
 namespace Control
 
 instance : CoeFun Control (fun _ => ℝ → ℝ → ℝ≥0) := ⟨toFun⟩
 
 variable {ω ω' : Control}
+
+/-- The diagonal continuity `ω(s, ·) → 0` as `· → s⁺` follows from joint continuity and
+`ω(s, s) = 0`. -/
+theorem diag_cont (ω : Control) (s : ℝ) : Tendsto (ω.toFun s) (𝓝[Ioi s] s) (𝓝 0) := by
+  rw [← ω.zero_diag s]
+  have hmem : (s, s) ∈ {p : ℝ × ℝ | p.1 ≤ p.2} := le_refl s
+  have hcont : ContinuousWithinAt (fun p : ℝ × ℝ => ω.toFun p.1 p.2) {p | p.1 ≤ p.2} (s, s) :=
+    ω.cont (s, s) hmem
+  -- Compose hcont with the map t ↦ (s, t), noting that Ioi s maps into {p | p.1 ≤ p.2}
+  have hmap : Tendsto (fun t => (s, t)) (𝓝[Ioi s] s) (𝓝[{p : ℝ × ℝ | p.1 ≤ p.2}] (s, s)) := by
+    apply tendsto_nhdsWithin_of_tendsto_nhds_of_eventually_within
+    · exact Filter.Tendsto.prodMk_nhds tendsto_const_nhds
+        (tendsto_nhdsWithin_of_tendsto_nhds tendsto_id)
+    · filter_upwards [self_mem_nhdsWithin] with t ht using le_of_lt ht
+  simpa using hcont.tendsto.comp hmap
 
 /-- Controls are nondecreasing in the right variable:
 if `s ≤ u ≤ t` then `ω(s, u) ≤ ω(s, t)`. -/
@@ -80,9 +97,8 @@ noncomputable def comp_superadd (ω : Control) {φ : ℝ≥0 → ℝ≥0} (hφ_m
   superadditive {s} {_u} {t} hsu hut := calc
     φ (ω s _) + φ (ω _ t) ≤ φ (ω s _ + ω _ t) := hφ_sadd _ _
     _ ≤ φ (ω s t) := hφ_mono (ω.superadditive hsu hut)
-  diag_cont s := by
-    rw [show (0 : ℝ≥0) = φ 0 from hφ_zero.symm]
-    exact (hφ_cont.tendsto _).comp (ω.diag_cont s)
+  zero_diag s := by simp [ω.zero_diag s, hφ_zero]
+  cont := hφ_cont.comp_continuousOn ω.cont
 
 /-- An increasing function `φ : ℝ≥0 → ℝ≥0` with `φ 0 = 0` is superadditive if and only if
 `φ(a) ≤ (a / (a + b)) * φ(a + b)` for all `a ≤ a + b`. This follows from convexity.
@@ -175,34 +191,17 @@ noncomputable def mul_rpow (ω ω' : Control) {α β : ℝ} (hαβ : 1 ≤ α + 
           NNReal.rpow_le_rpow hhat (by linarith)
       _ ≤ (ω.toFun s t ^ (α / θ) * ω'.toFun s t ^ (β / θ)) ^ θ :=
           NNReal.rpow_le_rpow (mul_le_mul' hω hω') (by linarith)
-  diag_cont s := by
-    -- At least one of α, β is positive since α + β ≥ 1 > 0
+  zero_diag s := by
+    simp only [ω.zero_diag s, ω'.zero_diag s]
     rcases hα.lt_or_eq with hα_pos | hα_zero
-    · -- α > 0: (ω s x)^α → 0 since ω s x → 0 and 0^α = 0 (α ≠ 0)
-      have h0α : (0 : ℝ≥0) ^ α = 0 := NNReal.zero_rpow hα_pos.ne'
-      have hα_tend : Tendsto (fun x => ω.toFun s x ^ α) (𝓝[Ioi s] s) (𝓝 0) := by
-        rw [← h0α]
-        exact (NNReal.continuous_rpow_const hα).continuousAt.tendsto.comp (ω.diag_cont s)
-      rcases hβ.lt_or_eq with hβ_pos | hβ_zero
-      · -- β > 0 too: (ω' s x)^β → 0, product → 0 * 0 = 0
-        have h0β : (0 : ℝ≥0) ^ β = 0 := NNReal.zero_rpow hβ_pos.ne'
-        have hβ_tend : Tendsto (fun x => ω'.toFun s x ^ β) (𝓝[Ioi s] s) (𝓝 0) := by
-          rw [← h0β]
-          exact (NNReal.continuous_rpow_const hβ).continuousAt.tendsto.comp (ω'.diag_cont s)
-        simpa using hα_tend.mul hβ_tend
-      · -- β = 0: (ω' s x)^0 = 1, product = (ω s x)^α → 0
-        subst hβ_zero
-        simp only [NNReal.rpow_zero, mul_one]
-        exact hα_tend
-    · -- α = 0: β ≥ 1, (ω' s x)^β → 0
-      subst hα_zero
-      have hβ_ge1 : 1 ≤ β := by linarith
-      have h0β : (0 : ℝ≥0) ^ β = 0 := NNReal.zero_rpow (by linarith)
-      have hβ_tend : Tendsto (fun x => ω'.toFun s x ^ β) (𝓝[Ioi s] s) (𝓝 0) := by
-        rw [← h0β]
-        exact (NNReal.continuous_rpow_const hβ).continuousAt.tendsto.comp (ω'.diag_cont s)
-      simp only [NNReal.rpow_zero, one_mul]
-      exact hβ_tend
+    · simp [NNReal.zero_rpow hα_pos.ne']
+    · rcases hβ.lt_or_eq with hβ_pos | hβ_zero
+      · simp [NNReal.zero_rpow hβ_pos.ne', ← hα_zero]
+      · linarith [hα_zero.symm ▸ hβ_zero.symm ▸ hαβ]
+  cont := by
+    apply ContinuousOn.mul
+    · exact (NNReal.continuous_rpow_const hα).comp_continuousOn ω.cont
+    · exact (NNReal.continuous_rpow_const hβ).comp_continuousOn ω'.cont
 
 end Control
 
@@ -626,6 +625,80 @@ theorem maximalInequality {A : ℝ → ℝ → ℝ} (ω : Control) {θ : ℝ} (h
               simp only [Fin.val_castSucc, Fin.val_last]
               ring
 
+/-! ### Uniform diagonal continuity and the mesh filter -/
+
+/-- For a control `ω`, the function `(u, v) ↦ ω(u, v)` converges to 0 uniformly as `v - u → 0`
+on any compact interval `[a, b]`. This follows from joint continuity of `ω` on the simplex
+and the fact that `ω(u, u) = 0`. -/
+private lemma Control.unif_diag_cont (ω : Control) {a b : ℝ} (hab : a ≤ b) :
+    ∀ ε > 0, ∃ δ > 0, ∀ {u v : ℝ}, a ≤ u → u ≤ v → v ≤ b → v - u < δ →
+      (ω u v : ℝ) < ε := by
+  intro ε hε
+  -- K = {(u,v) | a ≤ u ≤ v ≤ b} is compact (closed subset of [a,b]²)
+  set K : Set (ℝ × ℝ) := {p | a ≤ p.1 ∧ p.1 ≤ p.2 ∧ p.2 ≤ b}
+  have hK_compact : IsCompact K := by
+    have : K = (Set.Icc a b) ×ˢ (Set.Icc a b) ∩ {p | p.1 ≤ p.2} := by
+      ext ⟨u, v⟩; simp only [K, Set.mem_inter_iff, Set.mem_prod, Set.mem_Icc, Set.mem_setOf_eq]
+      constructor
+      · rintro ⟨h1, h2, h3⟩; exact ⟨⟨⟨h1, by linarith⟩, ⟨by linarith, h3⟩⟩, h2⟩
+      · rintro ⟨⟨⟨h1, _⟩, ⟨_, h3⟩⟩, h2⟩; exact ⟨h1, h2, h3⟩
+    rw [this]
+    exact ((isCompact_Icc.prod isCompact_Icc).inter_right
+      (isClosed_le continuous_fst continuous_snd))
+  -- f = (u,v) ↦ ω(u,v) (as ℝ) is continuous on K ⊆ {p | p.1 ≤ p.2}
+  have hf_cont : ContinuousOn (fun p : ℝ × ℝ => (ω.toFun p.1 p.2 : ℝ)) K :=
+    NNReal.continuous_coe.comp_continuousOn
+      (ω.cont.mono (fun p ⟨_, huv, _⟩ => huv))
+  -- Uniform continuity on K (Heine-Cantor)
+  have huc := hK_compact.uniformContinuousOn_of_continuous hf_cont
+  rw [Metric.uniformContinuousOn_iff] at huc
+  obtain ⟨δ₀, hδ₀_pos, hδ₀⟩ := huc (ε / 2) (half_pos hε)
+  refine ⟨min δ₀ 1 / 2, by positivity, fun {u v} hau huv hvb hvmu => ?_⟩
+  have huv_K : (u, v) ∈ K := ⟨hau, huv, hvb⟩
+  have huu_K : (u, u) ∈ K := ⟨hau, le_refl u, by linarith⟩
+  have hdist : dist (u, v) (u, u) < δ₀ := by
+    rw [Prod.dist_eq]
+    simp only [Real.dist_eq]
+    calc max |u - u| |v - u|
+        = max 0 (v - u) := by
+          rw [sub_self, abs_zero, abs_of_nonneg (by linarith)]
+      _ = v - u := max_eq_right (by linarith)
+      _ < min δ₀ 1 / 2 := hvmu
+      _ ≤ δ₀ := by linarith [min_le_left δ₀ 1]
+  have key := hδ₀ (u, v) huv_K (u, u) huu_K hdist
+  simp only [Real.dist_eq] at key
+  have h0 : (ω.toFun u u : ℝ) = 0 := by exact_mod_cast ω.zero_diag u
+  rw [h0, sub_zero, abs_of_nonneg (by positivity)] at key
+  linarith [half_lt_self hε]
+
+/-- **Key bound**: for a partition `π₀` that refines `π` (i.e., has `π`'s points as a subset),
+the Riemann sums satisfy
+`|Σ_{π₀} A - Σ_π A| ≤ 2^θ * ζ(θ) * ω_max(π)^(θ-1) * ω(s, t)`
+where `ω_max(π) = ⨆_k ω(t_k, t_{k+1})`.
+
+Proof sketch: decompose `Σ_{π₀} A = Σ_k Σ_{π₀|[tₖ,tₖ₊₁]} A` and apply `maximalInequality`
+to each sub-interval `[tₖ, tₖ₊₁]`. The error on `[tₖ,tₖ₊₁]` is `≤ C * ω(tₖ,tₖ₊₁)^θ`.
+Summing and using `ω(tₖ,tₖ₊₁)^θ ≤ ω_max^{θ-1} * ω(tₖ,tₖ₊₁)` and superadditivity gives
+`Σ_k ω(tₖ,tₖ₊₁) ≤ ω(s,t)`. -/
+private lemma riemannSum_refine_bound {A : ℝ → ℝ → ℝ} {ω : Control} {θ : ℝ} (hθ : 1 < θ)
+    (hA : ∀ {s u t : ℝ}, s ≤ u → u ≤ t → |defect A s u t| ≤ (ω s t : ℝ) ^ θ)
+    {s t : ℝ} (hst : s ≤ t) {N₀ N : ℕ}
+    (π₀ : Partition s t N₀) (π : Partition s t N)
+    (hrefine : ∀ k : Fin (N + 2), ∃ j : Fin (N₀ + 2), π.points k = π₀.points j) :
+    |π₀.riemannSum A - π.riemannSum A| ≤
+      (2 : ℝ) ^ θ * (∑' n : ℕ+, (n : ℝ) ^ (-θ)) *
+      (⨆ k : Fin (N + 1), (ω (π.points k.castSucc) (π.points k.succ) : ℝ)) ^ (θ - 1) *
+      (ω s t : ℝ) := by
+  sorry
+
+/-- The `ω_max` of a partition goes to 0 as the mesh goes to 0, by uniform diagonal continuity. -/
+private lemma omega_max_tendsto_zero {ω : Control} {s t : ℝ} (hst : s ≤ t) {N : ℕ}
+    {f : ℕ → Partition s t N} (hmesh : Filter.Tendsto (fun n => (f n).mesh) Filter.atTop (nhds 0)) :
+    Filter.Tendsto (fun n => ⨆ k : Fin (N + 1),
+      (ω ((f n).points k.castSucc) ((f n).points k.succ) : ℝ))
+      Filter.atTop (nhds 0) := by
+  sorry
+
 /-- **Sewing lemma.** Let `A : ℝ → ℝ → ℝ` be a two-parameter function satisfying the
 *germ bound* `|δA(s, u, t)| ≤ ω(s, t)^θ` for some control `ω` and exponent `θ > 1`.
 
@@ -641,4 +714,14 @@ theorem sewingLemma {A : ℝ → ℝ → ℝ} (ω : Control) {θ : ℝ} (hθ : 1
       (∀ {s t : ℝ}, s ≤ t → ∀ ε > 0, ∃ δ > 0,
         ∀ {N : ℕ} (π : Partition s t N), π.mesh < δ →
           |π.riemannSum A - (I t - I s)| < ε) := by
+  -- Step 1: For fixed s ≤ t, the Riemann sums over partitions of [s, t] are Cauchy
+  -- w.r.t. mesh → 0 (proved using riemannSum_refine_bound + omega_max_tendsto_zero).
+  -- Step 2: Define I t = lim_{mesh→0} Σ_{partition of [0, t]} A (using Classical.choice on
+  -- the Cauchy limit in the complete space ℝ).
+  -- Step 3: The additive structure I t - I s = lim_{[s,t]} holds by splitting partitions.
+  -- Step 4: maximalInequality + taking the limit gives |I t - I s - A s t| ≤ C * ω(s,t)^θ.
+  -- Step 5: Convergence holds by definition and the Cauchy estimate.
+  --
+  -- For now, the proof is left as sorry pending the formalization of riemannSum_refine_bound.
+  -- The key mathematical content is in maximalInequality (already proved above).
   sorry
