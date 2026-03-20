@@ -266,10 +266,11 @@ private lemma Partition.riemannSum_eq_sum_restrict {s t : ℝ} {N₀ N : ℕ}
     π₀.riemannSum A = ∑ k : Fin (N + 1),
       (π₀.restrict (φ k.castSucc) (φ k.succ)
         (hφ_mono (Fin.castSucc_lt_succ (i := k)))).riemannSum A := by
-  -- Proof: the Riemann sum decomposes as a sum over blocks [φ(k), φ(k+1)).
-  -- The sum Σ_{l : Fin(N₀+1)} equals Σ_{k : Fin(N+1)} Σ_{m : Fin(gap_k)} via a bijection,
-  -- where gap_k = φ(k.succ) - φ(k.castSucc) and the inner sum over m
-  -- corresponds to sub-indices in [φ(k.castSucc), φ(k.succ)).
+  -- Both sides equal the same sum ∑_{l : Fin(N₀+1)} A(π₀.points l.castSucc, π₀.points l.succ).
+  -- The decomposition follows from Finset.range splitting via φ.
+  -- Proof by induction on N (number of sub-intervals).
+  -- Key invariant: φ(0).val = 0, φ(N+1).val = N₀+1, and each block [φ(k), φ(k+1)) covers
+  -- exactly the indices in the k-th sub-interval.
   sorry
 
 /-- The *defect* of a two-parameter function `A` from additivity:
@@ -801,14 +802,18 @@ theorem sewingLemma {A : ℝ → ℝ → ℝ} (ω : Control) {θ : ℝ} (hθ : 1
       (∀ {s t : ℝ}, s ≤ t → ∀ ε > 0, ∃ δ > 0,
         ∀ {N : ℕ} (π : Partition s t N), π.mesh < δ →
           |π.riemannSum A - (I t - I s)| < ε) := by
-  -- Step 1: For fixed s ≤ t, the Riemann sums over partitions of [s, t] are Cauchy
-  -- w.r.t. mesh → 0 (proved using riemannSum_refine_bound + omega_max_tendsto_zero).
-  -- Step 2: Define I t = lim_{mesh→0} Σ_{partition of [0, t]} A (using Classical.choice on
-  -- the Cauchy limit in the complete space ℝ).
-  -- Step 3: The additive structure I t - I s = lim_{[s,t]} holds by splitting partitions.
-  -- Step 4: maximalInequality + taking the limit gives |I t - I s - A s t| ≤ C * ω(s,t)^θ.
-  -- Step 5: Convergence holds by definition and the Cauchy estimate.
+  -- We define I t := A 0 t. Then I t - I s = A 0 t - A 0 s.
+  -- Part 1 (maximal inequality): follows from maximalInequality on [s, t] with trivial partition.
+  -- Part 2 (convergence): for ε > 0 and s ≤ t, choose δ from unif_diag_cont so that
+  --   mesh(π) < δ implies ω_max(π)^(θ-1) * ω(s,t) < ε / (2^θ * ζ(θ)).
+  --   Then riemannSum_refine_bound (with π₀ = any refining seq and π = given fine partition)
+  --   gives |Σ_π A - (I t - I s)| < ε.
   --
-  -- For now, the proof is left as sorry pending the formalization of riemannSum_refine_bound.
-  -- The key mathematical content is in maximalInequality (already proved above).
+  -- The proof below uses the helper lemmas (with their sorries):
+  --   riemannSum_refine_bound, riemannSum_eq_sum_restrict
+  -- The full proof is deferred pending those formalizations.
+  --
+  -- NOTE: the choice I t := A 0 t gives maximal inequality bound C * ω(0,t)^θ
+  -- which is ≥ C * ω(s,t)^θ (wrong direction). The correct I is defined as the
+  -- Cauchy limit of fine Riemann sums. We leave this as sorry.
   sorry
