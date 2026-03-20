@@ -836,7 +836,158 @@ private lemma riemannSum_refine_bound {A : ℝ → ℝ → ℝ} {ω : Control} {
       (2 : ℝ) ^ θ * (∑' n : ℕ+, (n : ℝ) ^ (-θ)) *
       (⨆ k : Fin (N + 1), (ω (π.points k.castSucc) (π.points k.succ) : ℝ)) ^ (θ - 1) *
       (ω s t : ℝ) := by
-  sorry
+  -- Step 0: Extract a strictly monotone refinement map φ
+  set φ : Fin (N + 2) → Fin (N₀ + 2) := fun k => Classical.choose (hrefine k)
+  have hφ : ∀ k, π.points k = π₀.points (φ k) :=
+    fun k => Classical.choose_spec (hrefine k)
+  have hφ_mono : StrictMono φ := by
+    intro a b hab
+    by_contra h
+    push_neg at h
+    rcases h.eq_or_lt with heq | hlt
+    · have heq' : π₀.points (φ b) = π₀.points (φ a) := congr_arg π₀.points heq
+      rw [← hφ a, ← hφ b] at heq'
+      exact absurd (π.strictMono hab) (not_lt.mpr heq'.le)
+    · have h1 := π.strictMono hab
+      rw [hφ a, hφ b] at h1
+      exact absurd h1 (not_lt.mpr (le_of_lt (π₀.strictMono hlt)))
+  -- Step 1: Decompose π₀.riemannSum A using the restriction
+  have hdecomp := Partition.riemannSum_eq_sum_restrict π₀ π A hrefine φ hφ hφ_mono
+  -- Step 2: Write the difference as a sum of local differences
+  have hdiff : π₀.riemannSum A - π.riemannSum A =
+      ∑ k : Fin (N + 1), ((π₀.restrict (φ k.castSucc) (φ k.succ)
+        (hφ_mono (Fin.castSucc_lt_succ (i := k)))).riemannSum A -
+        A (π.points k.castSucc) (π.points k.succ)) := by
+    rw [hdecomp, Partition.riemannSum, ← Finset.sum_sub_distrib]
+  -- Step 3: Triangle inequality on the sum
+  have habs_sum : |π₀.riemannSum A - π.riemannSum A| ≤
+      ∑ k : Fin (N + 1), |(π₀.restrict (φ k.castSucc) (φ k.succ)
+        (hφ_mono (Fin.castSucc_lt_succ (i := k)))).riemannSum A -
+        A (π.points k.castSucc) (π.points k.succ)| := by
+    rw [hdiff]; exact Finset.abs_sum_le_sum_abs _ _
+  -- Step 4: Apply maximalInequality to each sub-interval
+  set C := (2 : ℝ) ^ θ * (∑' n : ℕ+, (n : ℝ) ^ (-θ))
+  -- Summability and positivity of the zeta sum
+  have hsumm_nat : Summable (fun n : ℕ => (n : ℝ) ^ (-θ)) :=
+    Real.summable_nat_rpow.2 (by linarith)
+  have hsumm_shift : Summable (fun n : ℕ => ((n : ℝ) + 1) ^ (-θ)) := by
+    have := (summable_nat_add_iff (f := fun n : ℕ => (n : ℝ) ^ (-θ)) 1).mpr hsumm_nat
+    exact this.congr (fun n => by push_cast; ring)
+  have hreidx : ∑' n : ℕ+, (n : ℝ) ^ (-θ) = ∑' n : ℕ, ((n : ℝ) + 1) ^ (-θ) :=
+    (tsum_pnat_eq_tsum_succ (f := fun n => (n : ℝ) ^ (-θ))).trans
+      (tsum_congr (fun n => by push_cast; ring_nf))
+  have hzeta_pos : 0 < ∑' n : ℕ+, (n : ℝ) ^ (-θ) := by
+    rw [hreidx]
+    have h1 : (0 : ℝ) < ((0 : ℝ) + 1) ^ (-θ) := by positivity
+    calc (0 : ℝ) < ((0 : ℝ) + 1) ^ (-θ) := by positivity
+      _ = ∑ n ∈ ({0} : Finset ℕ), ((n : ℝ) + 1) ^ (-θ) := by simp
+      _ ≤ ∑' n : ℕ, ((n : ℝ) + 1) ^ (-θ) :=
+          hsumm_shift.sum_le_tsum _ (fun n _ => by positivity)
+  have hC_pos : 0 < C := mul_pos (Real.rpow_pos_of_pos (by norm_num : (0:ℝ) < 2) θ) hzeta_pos
+  -- Step 4 continued: apply maximalInequality to each sub-interval
+  -- The restricted partition lives on [π₀.points (φ k.cs), π₀.points (φ k.s)]
+  -- and maximalInequality gives the bound with ω on that interval.
+  -- We need: the restrict endpoints match π's endpoints (via hφ).
+  have hlocal : ∀ k : Fin (N + 1),
+      |(π₀.restrict (φ k.castSucc) (φ k.succ)
+        (hφ_mono (Fin.castSucc_lt_succ (i := k)))).riemannSum A -
+        A (π₀.points (φ k.castSucc)) (π₀.points (φ k.succ))| ≤
+      C * (ω (π₀.points (φ k.castSucc)) (π₀.points (φ k.succ)) : ℝ) ^ θ := by
+    intro k
+    have hk_le : π₀.points (φ k.castSucc) ≤ π₀.points (φ k.succ) :=
+      le_of_lt (π₀.strictMono (hφ_mono (Fin.castSucc_lt_succ (i := k))))
+    exact maximalInequality ω hθ hA hk_le _
+  -- Rewrite in terms of π's points
+  have hlocal' : ∀ k : Fin (N + 1),
+      |(π₀.restrict (φ k.castSucc) (φ k.succ)
+        (hφ_mono (Fin.castSucc_lt_succ (i := k)))).riemannSum A -
+        A (π.points k.castSucc) (π.points k.succ)| ≤
+      C * (ω (π.points k.castSucc) (π.points k.succ) : ℝ) ^ θ := by
+    intro k
+    simp only [show ∀ j, π₀.points (φ j) = π.points j from fun j => (hφ j).symm] at hlocal
+    exact hlocal k
+  -- Step 5: Combine: |...| ≤ C * ∑ k, ω(tₖ, tₖ₊₁)^θ
+  have hsum_bound : |π₀.riemannSum A - π.riemannSum A| ≤
+      C * ∑ k : Fin (N + 1), (ω (π.points k.castSucc) (π.points k.succ) : ℝ) ^ θ :=
+    (habs_sum.trans (Finset.sum_le_sum (fun k _ => hlocal' k))).trans
+      (by rw [← Finset.mul_sum])
+  -- Step 6: Factor ω(tₖ, tₖ₊₁)^θ ≤ ω_max^(θ-1) * ω(tₖ, tₖ₊₁)
+  set ω_max := ⨆ k : Fin (N + 1), (ω (π.points k.castSucc) (π.points k.succ) : ℝ)
+  have hbdd : BddAbove (Set.range (fun k : Fin (N + 1) =>
+      (ω (π.points k.castSucc) (π.points k.succ) : ℝ))) := by
+    refine ⟨(ω s t : ℝ), fun x ⟨k, hk⟩ => hk ▸ ?_⟩
+    have hle1 : π.points k.castSucc ≤ π.points k.succ :=
+      le_of_lt (π.strictMono (Fin.castSucc_lt_succ (i := k)))
+    have hs_le : s ≤ π.points k.castSucc := by
+      have := π.strictMono.monotone (Fin.zero_le k.castSucc); rwa [π.head_eq] at this
+    have hle_t : π.points k.succ ≤ t := by
+      have := π.strictMono.monotone (Fin.le_last k.succ); rwa [π.last_eq] at this
+    have hcs_le_t : π.points k.castSucc ≤ t := hle1.trans hle_t
+    exact_mod_cast (ω.mono_right hle1 hle_t).trans (ω.mono_left hs_le hcs_le_t)
+  have hω_max_nn : 0 ≤ ω_max := Real.iSup_nonneg (fun k => by positivity)
+  have hω_le_max : ∀ k : Fin (N + 1),
+      (ω (π.points k.castSucc) (π.points k.succ) : ℝ) ≤ ω_max :=
+    fun k => le_ciSup hbdd k
+  have hfactor : ∀ k : Fin (N + 1),
+      (ω (π.points k.castSucc) (π.points k.succ) : ℝ) ^ θ ≤
+      ω_max ^ (θ - 1) * (ω (π.points k.castSucc) (π.points k.succ) : ℝ) := by
+    intro k
+    set ωk := (ω (π.points k.castSucc) (π.points k.succ) : ℝ)
+    have hωk_nn : 0 ≤ ωk := by positivity
+    by_cases hωk_zero : ωk = 0
+    · simp [hωk_zero, Real.zero_rpow (by linarith : θ ≠ 0)]
+    · have hωk_pos : 0 < ωk := lt_of_le_of_ne hωk_nn (Ne.symm hωk_zero)
+      calc ωk ^ θ = ωk ^ ((θ - 1) + 1) := by ring_nf
+          _ = ωk ^ (θ - 1) * ωk ^ (1 : ℝ) := Real.rpow_add hωk_pos (θ - 1) 1
+          _ = ωk ^ (θ - 1) * ωk := by rw [Real.rpow_one]
+          _ ≤ ω_max ^ (θ - 1) * ωk := by
+                apply mul_le_mul_of_nonneg_right _ hωk_nn
+                exact Real.rpow_le_rpow hωk_nn (hω_le_max k) (by linarith)
+  -- Step 7: Sum ω_k ≤ ω(s, t) by superadditivity
+  have hsum_omega : ∑ k : Fin (N + 1),
+      (ω (π.points k.castSucc) (π.points k.succ) : ℝ) ≤ (ω s t : ℝ) := by
+    -- Use sum_control_le with a clamped extension of π.points to ℕ
+    set a : ℕ → ℝ := fun i => π.points ⟨min i (N + 1), by omega⟩
+    have ha : Monotone a := by
+      intro i j hij; simp only [a]
+      rcases (min_le_min_right (N + 1) hij).eq_or_lt with h | h
+      · simp [h]
+      · exact le_of_lt (π.strictMono h)
+    have key := @sum_control_le ω (N + 1) a ha
+    have ha0 : a 0 = s := by simp [a, π.head_eq]
+    have haN1 : a (N + 1) = t := by simp only [a, Nat.min_self]; exact π.last_eq
+    -- Rewrite key: ∑ k : Fin(N+1), ω(a k, a(k+1)) ≤ ω(a 0, a(N+1)) = ω s t
+    have hkey : ∑ k : Fin (N + 1), ω (a ↑k) (a (↑k + 1)) ≤ ω s t := by
+      calc ∑ k : Fin (N + 1), ω (a ↑k) (a (↑k + 1))
+          ≤ ω (a 0) (a (N + 1)) := by
+            calc _ ≤ ω (a 0) (a (N + 1 : ℕ)) := by exact_mod_cast key
+              _ = ω (a 0) (a (N + 1)) := rfl
+        _ = ω s t := by rw [ha0, haN1]
+    -- Now show each summand matches
+    have hrw : ∀ k : Fin (N + 1), ω (a ↑k) (a (↑k + 1)) =
+        ω (π.points k.castSucc) (π.points k.succ) := by
+      intro ⟨k, hk⟩; simp only [a, Fin.val_mk,
+        min_eq_left (show k ≤ N + 1 by omega),
+        min_eq_left (show k + 1 ≤ N + 1 by omega)]
+      congr 1 <;> congr 1 <;> ext <;> simp [Fin.castSucc, Fin.succ]
+    calc (∑ k : Fin (N + 1), (ω (π.points k.castSucc) (π.points k.succ) : ℝ))
+        = ↑(∑ k : Fin (N + 1), ω (π.points k.castSucc) (π.points k.succ)) := by push_cast; rfl
+      _ = ↑(∑ k : Fin (N + 1), ω (a ↑k) (a (↑k + 1))) := by
+            congr 1; exact (Finset.sum_congr rfl (fun k _ => (hrw k).symm))
+      _ ≤ (ω s t : ℝ) := by exact_mod_cast hkey
+  -- Step 8: Combine everything
+  calc |π₀.riemannSum A - π.riemannSum A|
+      ≤ C * ∑ k : Fin (N + 1), (ω (π.points k.castSucc) (π.points k.succ) : ℝ) ^ θ :=
+        hsum_bound
+    _ ≤ C * ∑ k : Fin (N + 1),
+        (ω_max ^ (θ - 1) * (ω (π.points k.castSucc) (π.points k.succ) : ℝ)) := by
+        gcongr with k _; exact hfactor k
+    _ = C * ω_max ^ (θ - 1) *
+        ∑ k : Fin (N + 1), (ω (π.points k.castSucc) (π.points k.succ) : ℝ) := by
+        rw [← Finset.mul_sum]; ring
+    _ ≤ C * ω_max ^ (θ - 1) * (ω s t : ℝ) := by
+        apply mul_le_mul_of_nonneg_left hsum_omega
+        exact mul_nonneg hC_pos.le (Real.rpow_nonneg hω_max_nn _)
 
 /-- The `ω_max` of a partition goes to 0 as the mesh goes to 0, by uniform diagonal continuity. -/
 private lemma omega_max_tendsto_zero {ω : Control} {s t : ℝ} (hst : s ≤ t) {N : ℕ}
