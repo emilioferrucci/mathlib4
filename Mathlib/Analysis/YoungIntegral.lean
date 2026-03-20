@@ -236,6 +236,42 @@ end Partition
 
 /-! ## The sewing lemma -/
 
+/-- Restrict a partition `π₀ : Partition s t N₀` to the sub-interval
+`[π₀.points i, π₀.points j]` for indices `i ≤ j`. The result has `j - i - 1` interior points. -/
+private noncomputable def Partition.restrict {s t : ℝ} {N₀ : ℕ} (π₀ : Partition s t N₀)
+    (i j : Fin (N₀ + 2)) (hij : i < j) :
+    Partition (π₀.points i) (π₀.points j) (j.val - i.val - 1) where
+  points k := π₀.points ⟨i.val + k.val, by
+    have hk := k.isLt  -- k < j - i - 1 + 2 = j - i + 1 (since j > i so j - i ≥ 1)
+    have hj := j.isLt  -- j < N₀ + 2
+    have hij' : i.val < j.val := hij
+    omega⟩
+  strictMono a b hab := π₀.strictMono (by simp only [Fin.mk_lt_mk]; omega)
+  head_eq := by simp
+  last_eq := by
+    simp only [Fin.last]
+    congr 1; ext; simp only [Fin.val_mk]; omega
+
+/-- The Riemann sum of `π₀` decomposes as a sum over sub-intervals determined by `π`.
+For each consecutive pair `(tₖ, tₖ₊₁)` of `π`, the sum of `A` over those sub-interval
+points of `π₀` equals the restricted Riemann sum. -/
+private lemma Partition.riemannSum_eq_sum_restrict {s t : ℝ} {N₀ N : ℕ}
+    (π₀ : Partition s t N₀) (π : Partition s t N) (A : ℝ → ℝ → ℝ)
+    -- For each point of π, find its index in π₀
+    (hidx : ∀ k : Fin (N + 2), ∃ j : Fin (N₀ + 2), π.points k = π₀.points j)
+    -- The index function
+    (φ : Fin (N + 2) → Fin (N₀ + 2))
+    (hφ : ∀ k, π.points k = π₀.points (φ k))
+    (hφ_mono : StrictMono φ) :
+    π₀.riemannSum A = ∑ k : Fin (N + 1),
+      (π₀.restrict (φ k.castSucc) (φ k.succ)
+        (hφ_mono (Fin.castSucc_lt_succ (i := k)))).riemannSum A := by
+  -- Proof: the Riemann sum decomposes as a sum over blocks [φ(k), φ(k+1)).
+  -- The sum Σ_{l : Fin(N₀+1)} equals Σ_{k : Fin(N+1)} Σ_{m : Fin(gap_k)} via a bijection,
+  -- where gap_k = φ(k.succ) - φ(k.castSucc) and the inner sum over m
+  -- corresponds to sub-indices in [φ(k.castSucc), φ(k.succ)).
+  sorry
+
 /-- The *defect* of a two-parameter function `A` from additivity:
 `δA(s, u, t) = A(s, t) - A(s, u) - A(u, t)`. -/
 noncomputable def defect (A : ℝ → ℝ → ℝ) (s u t : ℝ) : ℝ := A s t - A s u - A u t
