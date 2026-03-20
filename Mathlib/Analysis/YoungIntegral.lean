@@ -266,33 +266,122 @@ private lemma Partition.riemannSum_eq_sum_restrict {s t : ℝ} {N₀ N : ℕ}
     π₀.riemannSum A = ∑ k : Fin (N + 1),
       (π₀.restrict (φ k.castSucc) (φ k.succ)
         (hφ_mono (Fin.castSucc_lt_succ (i := k)))).riemannSum A := by
-  -- Unfold both sides as range sums, then use the range-splitting identity.
-  -- LHS = ∑ l ∈ range(N₀+1), A(π₀.points ⟨l,_⟩, π₀.points ⟨l+1,_⟩)
-  -- RHS = ∑ k, ∑ m ∈ range(φ(k+1)-φ(k)), A(π₀.points ⟨φ(k)+m,_⟩, π₀.points ⟨φ(k)+m+1,_⟩)
-  -- These are equal by the range-splitting: range(N₀+1) = disjoint union of [φ(k), φ(k+1)).
-  simp only [Partition.riemannSum, Partition.restrict]
-  -- Establish φ(0) = 0 and φ(N+1) = N₀+1 from the head/last equations
-  have hφ0 : φ 0 = 0 := by
-    apply π₀.strictMono.injective
-    rw [← hφ 0, π.head_eq, π₀.head_eq]
-  have hφlast : φ (Fin.last (N + 1)) = Fin.last (N₀ + 1) := by
-    apply π₀.strictMono.injective
-    rw [← hφ (Fin.last (N + 1)), π.last_eq, π₀.last_eq]
-  -- The key identity: the LHS sum (over Fin(N₀+1)) equals
-  -- the iterated range split at positions φ(1), φ(2), ..., φ(N).
-  -- Prove by induction on N: the sum ∑_{l : Fin(N₀+1)} splits as
-  --   ∑_{l < φ(1)} + ∑_{φ(1) ≤ l < φ(2)} + ... + ∑_{φ(N) ≤ l}
-  -- using Finset.sum_range_add repeatedly.
-  -- Proof strategy: show both sides equal ∑_{l ∈ range(N₀+1)} A(π₀.points ⟨l,_⟩, π₀.points ⟨l+1,_⟩).
-  -- The RHS decomposes as a disjoint union of blocks [φ(k), φ(k+1)) via strictly monotone φ.
-  -- This is a combinatorial identity proved by the range-splitting Finset.sum_range_add.
-  -- The full proof requires establishing φ(0)=0, φ(N+1)=N₀+1, and the partition-of-range property.
-  -- We establish the key structural facts and leave the combinatorial part as sorry.
   have hφ0 : φ 0 = 0 := by
     apply π₀.strictMono.injective; rw [← hφ 0, π.head_eq, π₀.head_eq]
   have hφlast : φ (Fin.last (N + 1)) = Fin.last (N₀ + 1) := by
     apply π₀.strictMono.injective; rw [← hφ (Fin.last (N + 1)), π.last_eq, π₀.last_eq]
-  sorry
+  have hφ0_val : (φ 0).val = 0 := congr_arg Fin.val hφ0
+  have hφlast_val : (φ (Fin.last (N + 1))).val = N₀ + 1 := by
+    have := congr_arg Fin.val hφlast; simp [Fin.val_last] at this; exact this
+  -- Auxiliary: a monotone ℕ-sequence decomposes range(g(n)) into consecutive Ico blocks.
+  have range_decomp : ∀ (n : ℕ) (g : ℕ → ℕ) (_ : Monotone g) (_ : g 0 = 0) (f : ℕ → ℝ),
+      ∑ l ∈ Finset.range (g n), f l =
+      ∑ k ∈ Finset.range n, ∑ l ∈ Finset.Ico (g k) (g (k + 1)), f l := by
+    intro n g hg hg0 f
+    induction n with
+    | zero => simp [hg0]
+    | succ n ih =>
+      rw [Finset.sum_range_succ, ← ih]
+      have h0n : 0 ≤ g n := by rw [← hg0]; exact hg (Nat.zero_le _)
+      rw [Finset.range_eq_Ico,
+        ← Finset.sum_Ico_consecutive f h0n (hg (Nat.le_succ n)),
+        Nat.Ico_zero_eq_range]
+  -- Define the ℕ-level summand
+  -- f(l) = A(π₀.points ⟨l, _⟩, π₀.points ⟨l+1, _⟩) for l < N₀+1
+  -- We clamp to make it total.
+  -- Apply range_decomp with g(k) = (φ ⟨k, _⟩).val extended to ℕ
+  -- g(k) = (φ ⟨min k (N+1), _⟩).val, monotone since φ is monotone and min is monotone
+  set g : ℕ → ℕ := fun k => (φ ⟨min k (N + 1), by omega⟩).val
+  have hg_mono : Monotone g := by
+    intro a b hab
+    simp only [g]
+    by_cases ha : a ≤ N + 1 <;> by_cases hb : b ≤ N + 1
+    · simp only [Nat.min_eq_left ha, Nat.min_eq_left hb]
+      rcases eq_or_lt_of_le hab with rfl | hab'
+      · rfl
+      · exact le_of_lt (hφ_mono (Fin.mk_lt_mk.mpr hab'))
+    · simp only [Nat.min_eq_left ha, Nat.min_eq_right (by omega : N + 1 ≤ b)]
+      rcases eq_or_lt_of_le (show a ≤ N + 1 from ha) with rfl | ha'
+      · exact le_refl _
+      · exact le_of_lt (hφ_mono (Fin.mk_lt_mk.mpr ha'))
+    · omega
+    · simp only [Nat.min_eq_right (by omega : N + 1 ≤ a),
+        Nat.min_eq_right (by omega : N + 1 ≤ b)]
+      exact le_refl _
+  have hg0' : g 0 = 0 := by
+    show (φ ⟨min 0 (N + 1), _⟩).val = 0
+    simp [hφ0_val]
+  have hgN : g (N + 1) = N₀ + 1 := by
+    simp only [g, min_self]
+    exact hφlast_val
+  -- Key identity at ℕ level
+  have key : ∀ (f : ℕ → ℝ), ∑ l ∈ Finset.range (N₀ + 1), f l =
+      ∑ k ∈ Finset.range (N + 1), ∑ l ∈ Finset.Ico (g k) (g (k + 1)), f l := by
+    intro f; rw [← hgN, range_decomp (N + 1) g hg_mono hg0' f]
+  -- g agrees with φ on {0,...,N+1}
+  have hg_eq : ∀ k : ℕ, (hk : k ≤ N + 1) → g k = (φ ⟨k, Nat.lt_of_le_of_lt hk (by omega)⟩).val := by
+    intro k hk; simp [g, Nat.min_eq_left hk]
+  -- Now both sides are sums that decompose the same range. We convert each side to
+  -- ∑ l ∈ Finset.range (N₀+1), A(π₀[⟨l,_⟩], π₀[⟨l+1,_⟩]) using the key decomposition.
+  -- LHS: π₀.riemannSum A = ∑ k : Fin (N₀+1), A(...)
+  -- We prove LHS = ∑ l in range(N₀+1), and RHS = same, via key.
+  -- Define the common ℕ → ℝ summand (clamped to be total)
+  set F : ℕ → ℝ := fun l =>
+    A (π₀.points ⟨min l (N₀ + 1), by omega⟩) (π₀.points ⟨min (l + 1) (N₀ + 1), by omega⟩)
+  -- LHS = ∑ l in range(N₀+1), F l
+  suffices hLHS : π₀.riemannSum A = ∑ l ∈ Finset.range (N₀ + 1), F l by
+    rw [hLHS, key F]
+    -- Now: ∑ k ∈ range(N+1), ∑ l ∈ Ico(g k, g(k+1)), F l
+    --    = ∑ k : Fin(N+1), (restrict ...).riemannSum A
+    -- Convert key LHS from range to Fin
+    rw [← Fin.sum_univ_eq_sum_range]
+    apply Finset.sum_congr rfl
+    intro ⟨k, hk⟩ _
+    show ∑ l ∈ Finset.Ico (g k) (g (k + 1)), F l =
+        (π₀.restrict (φ (⟨k, hk⟩ : Fin (N + 1)).castSucc) (φ (⟨k, hk⟩ : Fin (N + 1)).succ) _).riemannSum A
+    rw [hg_eq k (by omega), hg_eq (k + 1) (by omega)]
+    -- Now goal: ∑ l ∈ Ico(φ⟨k,_⟩.val, φ⟨k+1,_⟩.val), F l = restrict.riemannSum A
+    -- where the Fin args to φ match castSucc and succ
+    have hcs : (φ ⟨k, by omega⟩) = φ (⟨k, hk⟩ : Fin (N + 1)).castSucc := by congr 1
+    have hsu : (φ ⟨k + 1, by omega⟩) = φ (⟨k, hk⟩ : Fin (N + 1)).succ := by congr 1
+    rw [hcs, hsu]
+    -- Now: ∑ l ∈ Ico(φ(k.cs).val, φ(k.s).val), F l = (restrict ...).riemannSum A
+    symm; rw [Partition.riemannSum]; simp only [Partition.restrict]
+    -- Goal: ∑ m : Fin(bs), A(π₀[φ(k.cs)+m.cs], π₀[φ(k.cs)+m.s]) =
+    --       ∑ l ∈ Ico(φ(k.cs).val, φ(k.s).val), F l
+    -- First convert the Ico sum: ∑ l ∈ Ico(a, b), F l = ∑ m ∈ Ico(0, b-a), F(a+m)
+    set a := (φ (⟨k, hk⟩ : Fin (N + 1)).castSucc).val
+    set b := (φ (⟨k, hk⟩ : Fin (N + 1)).succ).val
+    have hab : a < b := hφ_mono (Fin.castSucc_lt_succ (i := ⟨k, hk⟩))
+    have hbs : b - a - 1 + 1 = b - a := by omega
+    -- Convert Ico to shifted range via sum_Ico_add
+    have hab_le : a ≤ b := le_of_lt hab
+    rw [show Finset.Ico a b = Finset.Ico (0 + a) (b - a + a) from by
+      congr 1 <;> omega]
+    rw [← Finset.sum_Ico_add F 0 (b - a) a, Nat.Ico_zero_eq_range]
+    -- Now: ∑ m : Fin(b-a-1+1), body(m) = ∑ m ∈ range(b-a), F(a+m)
+    -- The summand for index m is A(π₀[a + m.castSucc], π₀[a + m.succ])
+    -- = A(π₀[a + m], π₀[a + m + 1]) = F(a + m) (since a+m, a+m+1 ≤ N₀+1).
+    -- Use a single tactic to prove both sides equal.
+    trans ∑ m : Fin (b - a - 1 + 1), F (a + m.val)
+    · apply Finset.sum_congr rfl; intro ⟨m, hm⟩ _
+      have hm' : m < b - a := by omega
+      show A (π₀.points ⟨_, _⟩) (π₀.points ⟨_, _⟩) = F (a + m)
+      simp only [F, a, Fin.val_castSucc, Fin.val_succ,
+        Nat.min_eq_left (by have := (φ (⟨k, hk⟩ : Fin (N + 1)).succ).isLt; omega),
+        Nat.min_eq_left (by have := (φ (⟨k, hk⟩ : Fin (N + 1)).succ).isLt; omega)]
+      congr 1 <;> congr 1 <;> ext <;> simp <;> omega
+    · rw [Fin.sum_univ_eq_sum_range (fun m => F (a + m)), hbs]
+  -- Proof of hLHS: π₀.riemannSum A = ∑ l in range(N₀+1), F l
+  simp only [Partition.riemannSum]
+  -- First show the Fin sum equals the Fin sum of F ∘ val
+  have : (∑ k : Fin (N₀ + 1), A (π₀.points k.castSucc) (π₀.points k.succ)) =
+      ∑ k : Fin (N₀ + 1), F k.val := by
+    apply Finset.sum_congr rfl; intro ⟨l, hl⟩ _
+    simp only [F, Nat.min_eq_left (by omega : l ≤ N₀ + 1),
+      Nat.min_eq_left (by omega : l + 1 ≤ N₀ + 1)]
+    congr 1 <;> congr 1 <;> ext <;> simp [Fin.castSucc, Fin.succ]
+  rw [this, Fin.sum_univ_eq_sum_range F]
 
 /-- The *defect* of a two-parameter function `A` from additivity:
 `δA(s, u, t) = A(s, t) - A(s, u) - A(u, t)`. -/
