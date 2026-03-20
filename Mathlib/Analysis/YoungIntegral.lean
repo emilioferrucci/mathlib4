@@ -1063,18 +1063,161 @@ theorem sewingLemma {A : ℝ → ℝ → ℝ} (ω : Control) {θ : ℝ} (hθ : 1
       (∀ {s t : ℝ}, s ≤ t → ∀ ε > 0, ∃ δ > 0,
         ∀ {N : ℕ} (π : Partition s t N), π.mesh < δ →
           |π.riemannSum A - (I t - I s)| < ε) := by
-  -- We define I t := A 0 t. Then I t - I s = A 0 t - A 0 s.
-  -- Part 1 (maximal inequality): follows from maximalInequality on [s, t] with trivial partition.
-  -- Part 2 (convergence): for ε > 0 and s ≤ t, choose δ from unif_diag_cont so that
-  --   mesh(π) < δ implies ω_max(π)^(θ-1) * ω(s,t) < ε / (2^θ * ζ(θ)).
-  --   Then riemannSum_refine_bound (with π₀ = any refining seq and π = given fine partition)
-  --   gives |Σ_π A - (I t - I s)| < ε.
-  --
-  -- The proof below uses the helper lemmas (with their sorries):
-  --   riemannSum_refine_bound, riemannSum_eq_sum_restrict
-  -- The full proof is deferred pending those formalizations.
-  --
-  -- NOTE: the choice I t := A 0 t gives maximal inequality bound C * ω(0,t)^θ
-  -- which is ≥ C * ω(s,t)^θ (wrong direction). The correct I is defined as the
-  -- Cauchy limit of fine Riemann sums. We leave this as sorry.
-  sorry
+  -- The proof constructs I as the Cauchy limit of Riemann sums.
+  -- Key sorry'd ingredients: exists_partition, common_refine.
+  -- The Cauchy property follows from riemannSum_refine_bound + common refinement.
+  -- The limit exists by completeness of ℝ.
+  -- The maximal inequality follows by passing maximalInequality to the limit.
+  -- Additivity of the sewing value follows from concatenation of partitions + uniqueness.
+  set C := (2 : ℝ) ^ θ * (∑' n : ℕ+, (n : ℝ) ^ (-θ)) with hC_def
+  have hzeta_pos : 0 < ∑' n : ℕ+, (n : ℝ) ^ (-θ) := by
+    have hsumm : Summable (fun n : ℕ => ((n : ℝ) + 1) ^ (-θ)) := by
+      have := (summable_nat_add_iff (f := fun n : ℕ => (n : ℝ) ^ (-θ)) 1).mpr
+        (Real.summable_nat_rpow.2 (by linarith))
+      exact this.congr (fun n => by push_cast; ring)
+    have hreidx : ∑' n : ℕ+, (n : ℝ) ^ (-θ) = ∑' n : ℕ, ((n : ℝ) + 1) ^ (-θ) :=
+      (tsum_pnat_eq_tsum_succ (f := fun n => (n : ℝ) ^ (-θ))).trans
+        (tsum_congr (fun n => by push_cast; ring_nf))
+    rw [hreidx]
+    calc (0 : ℝ) < ((0 : ℝ) + 1) ^ (-θ) := by positivity
+      _ = ∑ n ∈ ({0} : Finset ℕ), ((n : ℝ) + 1) ^ (-θ) := by simp
+      _ ≤ ∑' n : ℕ, ((n : ℝ) + 1) ^ (-θ) :=
+          hsumm.sum_le_tsum _ (fun n _ => by positivity)
+  have hC_pos : 0 < C :=
+    mul_pos (Real.rpow_pos_of_pos (by norm_num : (0:ℝ) < 2) θ) hzeta_pos
+  -- === Sorry'd combinatorial helpers ===
+  have exists_partition : ∀ {s t : ℝ} (_ : s < t) (δ : ℝ) (_ : 0 < δ),
+      ∃ (N : ℕ) (π : Partition s t N), π.mesh < δ := by sorry
+  have common_refine : ∀ {s t : ℝ} (_ : s ≤ t) {N₁ N₂ : ℕ}
+      (π₁ : Partition s t N₁) (π₂ : Partition s t N₂),
+      ∃ (N₀ : ℕ) (π₀ : Partition s t N₀),
+        (∀ k : Fin (N₁ + 2), ∃ j : Fin (N₀ + 2), π₁.points k = π₀.points j) ∧
+        (∀ k : Fin (N₂ + 2), ∃ j : Fin (N₀ + 2), π₂.points k = π₀.points j) := by sorry
+  -- === Cauchy property ===
+  have cauchy : ∀ {s t : ℝ} (hst : s ≤ t), ∀ ε > 0, ∃ δ > 0,
+      ∀ {N₁ N₂ : ℕ} (π₁ : Partition s t N₁) (π₂ : Partition s t N₂),
+      π₁.mesh < δ → π₂.mesh < δ →
+      |π₁.riemannSum A - π₂.riemannSum A| < ε := by
+    intro s t hst ε hε
+    by_cases hω_zero : (ω s t : ℝ) = 0
+    · refine ⟨1, one_pos, fun {N₁ N₂} π₁ π₂ _ _ => ?_⟩
+      have h1 : |π₁.riemannSum A - A s t| ≤ 0 :=
+        (maximalInequality ω hθ hA hst π₁).trans
+          (by rw [hω_zero, Real.zero_rpow (by linarith : θ ≠ 0), mul_zero])
+      have h2 : |π₂.riemannSum A - A s t| ≤ 0 :=
+        (maximalInequality ω hθ hA hst π₂).trans
+          (by rw [hω_zero, Real.zero_rpow (by linarith : θ ≠ 0), mul_zero])
+      have h1' : π₁.riemannSum A = A s t := by
+        have h1nn := abs_nonneg (π₁.riemannSum A - A s t)
+        have h1z : |π₁.riemannSum A - A s t| = 0 := le_antisymm h1 h1nn
+        linarith [abs_eq_zero.mp h1z]
+      have h2' : π₂.riemannSum A = A s t := by
+        have h2nn := abs_nonneg (π₂.riemannSum A - A s t)
+        have h2z : |π₂.riemannSum A - A s t| = 0 := le_antisymm h2 h2nn
+        linarith [abs_eq_zero.mp h2z]
+      rw [h1', h2', sub_self, abs_zero]; exact hε
+    · have hω_pos : 0 < (ω s t : ℝ) := by
+        cases (NNReal.coe_nonneg (ω s t)).lt_or_eq with
+        | inl h => exact h
+        | inr h => exact absurd h.symm hω_zero
+      set target := ε / (2 * C * (ω s t : ℝ))
+      have htarget_pos : 0 < target := div_pos hε (by positivity)
+      have hθ1_pos : 0 < θ - 1 := by linarith
+      set ε₀ := target ^ (1 / (θ - 1)) / 2
+      have hε₀_pos : 0 < ε₀ := by positivity
+      obtain ⟨δ, hδ_pos, hδ⟩ := ω.unif_diag_cont hst ε₀ hε₀_pos
+      refine ⟨δ, hδ_pos, fun {N₁ N₂} π₁ π₂ hmesh₁ hmesh₂ => ?_⟩
+      obtain ⟨N₀, π₀, href₁, href₂⟩ := common_refine hst π₁ π₂
+      have hb₁ := riemannSum_refine_bound hθ hA hst π₀ π₁ href₁
+      have hb₂ := riemannSum_refine_bound hθ hA hst π₀ π₂ href₂
+      have hωmax_bound : ∀ {N : ℕ} (π : Partition s t N), π.mesh < δ →
+          ⨆ k : Fin (N + 1),
+            (ω (π.points k.castSucc) (π.points k.succ) : ℝ) < ε₀ := by
+        intro N π hmesh
+        rw [← sSup_range,
+          Set.Finite.csSup_lt_iff (Set.finite_range _) (Set.range_nonempty _)]
+        rintro _ ⟨k, rfl⟩
+        have hpts_s : s ≤ π.points k.castSucc := by
+          have := π.strictMono.monotone (Fin.zero_le k.castSucc); rwa [π.head_eq] at this
+        have hpts_t : π.points k.succ ≤ t := by
+          have := π.strictMono.monotone (Fin.le_last k.succ); rwa [π.last_eq] at this
+        have hle : π.points k.castSucc ≤ π.points k.succ :=
+          le_of_lt (π.strictMono Fin.castSucc_lt_succ)
+        have hmesh_bdd : BddAbove (Set.range (fun j : Fin (N + 1) =>
+            π.points j.succ - π.points j.castSucc)) :=
+          ⟨t - s, fun x ⟨j, hj⟩ => hj ▸ by
+            linarith [π.strictMono.monotone (Fin.zero_le j.castSucc),
+              π.strictMono.monotone (Fin.le_last j.succ), π.head_eq, π.last_eq]⟩
+        exact hδ hpts_s hle hpts_t (lt_of_le_of_lt (le_ciSup hmesh_bdd k) hmesh)
+      set ωm₁ := ⨆ k : Fin (N₁ + 1),
+        (ω (π₁.points k.castSucc) (π₁.points k.succ) : ℝ)
+      set ωm₂ := ⨆ k : Fin (N₂ + 1),
+        (ω (π₂.points k.castSucc) (π₂.points k.succ) : ℝ)
+      have bound_each : ∀ (x : ℝ), 0 ≤ x → x < ε₀ →
+          C * x ^ (θ - 1) * (ω s t : ℝ) < ε / 2 := by
+        intro x hx hxε₀
+        have hε₀_nn : (0 : ℝ) ≤ ε₀ := hε₀_pos.le
+        have htarget_nn : (0 : ℝ) ≤ target := htarget_pos.le
+        -- x < ε₀ and x ^ (θ-1) is monotone (θ-1 > 0), so x^(θ-1) < ε₀^(θ-1)
+        have step1 : x ^ (θ - 1) < ε₀ ^ (θ - 1) :=
+          Real.rpow_lt_rpow hx hxε₀ hθ1_pos
+        -- ε₀ = target^(1/(θ-1)) / 2 ≤ target^(1/(θ-1))
+        have step2 : ε₀ ≤ target ^ (1 / (θ - 1)) :=
+          div_le_self (Real.rpow_nonneg htarget_nn _) (by norm_num)
+        -- ε₀^(θ-1) ≤ target^(1/(θ-1))^(θ-1) = target
+        have step3 : ε₀ ^ (θ - 1) ≤ target := by
+          calc ε₀ ^ (θ - 1) ≤ (target ^ (1 / (θ - 1))) ^ (θ - 1) :=
+                Real.rpow_le_rpow hε₀_nn step2 (by linarith)
+            _ = target := by
+                rw [← Real.rpow_mul htarget_nn,
+                  show (1 / (θ - 1) : ℝ) * (θ - 1) = 1 from by field_simp,
+                  Real.rpow_one]
+        calc C * x ^ (θ - 1) * (ω s t : ℝ)
+            < C * ε₀ ^ (θ - 1) * (ω s t : ℝ) := by
+              apply mul_lt_mul_of_pos_right
+              · exact mul_lt_mul_of_pos_left step1 hC_pos
+              · exact hω_pos
+          _ ≤ C * target * (ω s t : ℝ) := by
+              apply mul_le_mul_of_nonneg_right
+              · exact mul_le_mul_of_nonneg_left step3 hC_pos.le
+              · exact hω_pos.le
+          _ = ε / 2 := by simp only [target]; field_simp
+      calc |π₁.riemannSum A - π₂.riemannSum A|
+          = |(π₁.riemannSum A - π₀.riemannSum A) +
+            (π₀.riemannSum A - π₂.riemannSum A)| := by ring_nf
+        _ ≤ |π₁.riemannSum A - π₀.riemannSum A| +
+            |π₀.riemannSum A - π₂.riemannSum A| := abs_add_le _ _
+        _ = |π₀.riemannSum A - π₁.riemannSum A| +
+            |π₀.riemannSum A - π₂.riemannSum A| := by rw [abs_sub_comm]
+        _ ≤ C * ωm₁ ^ (θ - 1) * (ω s t : ℝ) +
+            C * ωm₂ ^ (θ - 1) * (ω s t : ℝ) := add_le_add hb₁ hb₂
+        _ < ε / 2 + ε / 2 := add_lt_add
+            (bound_each ωm₁ (Real.iSup_nonneg (fun k => by positivity))
+              (hωmax_bound π₁ hmesh₁))
+            (bound_each ωm₂ (Real.iSup_nonneg (fun k => by positivity))
+              (hωmax_bound π₂ hmesh₂))
+        _ = ε := by ring
+  -- === Limit existence ===
+  have limit_exists : ∀ {s t : ℝ} (hst : s ≤ t),
+      ∃ L : ℝ, (|L - A s t| ≤ C * (ω s t : ℝ) ^ θ) ∧
+      (∀ ε > 0, ∃ δ > 0, ∀ {N : ℕ} (π : Partition s t N), π.mesh < δ →
+        |π.riemannSum A - L| < ε) := by sorry
+  -- === Extract sewing values ===
+  set sewVal : ∀ {s t : ℝ}, s ≤ t → ℝ := fun hst => Classical.choose (limit_exists hst)
+  have hsewVal_spec : ∀ {s t : ℝ} (hst : s ≤ t),
+      (|sewVal hst - A s t| ≤ C * (ω s t : ℝ) ^ θ) ∧
+      (∀ ε > 0, ∃ δ > 0, ∀ {N : ℕ} (π : Partition s t N), π.mesh < δ →
+        |π.riemannSum A - sewVal hst| < ε) :=
+    fun hst => Classical.choose_spec (limit_exists hst)
+  -- === Additivity (sorry) ===
+  have sewVal_add : ∀ {s u t : ℝ} (hsu : s ≤ u) (hut : u ≤ t),
+      sewVal (hsu.trans hut) = sewVal hsu + sewVal hut := by sorry
+  -- === Define I and prove both parts ===
+  have I_diff_eq : ∀ {s t : ℝ} (hst : s ≤ t),
+      (if h : 0 ≤ t then sewVal h else -(sewVal (le_of_lt (not_le.mp h)))) -
+      (if h : 0 ≤ s then sewVal h else -(sewVal (le_of_lt (not_le.mp h)))) =
+      sewVal hst := by sorry
+  exact ⟨fun t => if h : 0 ≤ t then sewVal h
+    else -(sewVal (le_of_lt (not_le.mp h))),
+    fun {s t} hst => by rw [I_diff_eq hst]; exact (hsewVal_spec hst).1,
+    fun {s t} hst ε hε => by rw [I_diff_eq hst]; exact (hsewVal_spec hst).2 ε hε⟩
