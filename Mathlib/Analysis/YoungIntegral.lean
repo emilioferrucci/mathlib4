@@ -266,11 +266,32 @@ private lemma Partition.riemannSum_eq_sum_restrict {s t : ℝ} {N₀ N : ℕ}
     π₀.riemannSum A = ∑ k : Fin (N + 1),
       (π₀.restrict (φ k.castSucc) (φ k.succ)
         (hφ_mono (Fin.castSucc_lt_succ (i := k)))).riemannSum A := by
-  -- Both sides equal the same sum ∑_{l : Fin(N₀+1)} A(π₀.points l.castSucc, π₀.points l.succ).
-  -- The decomposition follows from Finset.range splitting via φ.
-  -- Proof by induction on N (number of sub-intervals).
-  -- Key invariant: φ(0).val = 0, φ(N+1).val = N₀+1, and each block [φ(k), φ(k+1)) covers
-  -- exactly the indices in the k-th sub-interval.
+  -- Unfold both sides as range sums, then use the range-splitting identity.
+  -- LHS = ∑ l ∈ range(N₀+1), A(π₀.points ⟨l,_⟩, π₀.points ⟨l+1,_⟩)
+  -- RHS = ∑ k, ∑ m ∈ range(φ(k+1)-φ(k)), A(π₀.points ⟨φ(k)+m,_⟩, π₀.points ⟨φ(k)+m+1,_⟩)
+  -- These are equal by the range-splitting: range(N₀+1) = disjoint union of [φ(k), φ(k+1)).
+  simp only [Partition.riemannSum, Partition.restrict]
+  -- Establish φ(0) = 0 and φ(N+1) = N₀+1 from the head/last equations
+  have hφ0 : φ 0 = 0 := by
+    apply π₀.strictMono.injective
+    rw [← hφ 0, π.head_eq, π₀.head_eq]
+  have hφlast : φ (Fin.last (N + 1)) = Fin.last (N₀ + 1) := by
+    apply π₀.strictMono.injective
+    rw [← hφ (Fin.last (N + 1)), π.last_eq, π₀.last_eq]
+  -- The key identity: the LHS sum (over Fin(N₀+1)) equals
+  -- the iterated range split at positions φ(1), φ(2), ..., φ(N).
+  -- Prove by induction on N: the sum ∑_{l : Fin(N₀+1)} splits as
+  --   ∑_{l < φ(1)} + ∑_{φ(1) ≤ l < φ(2)} + ... + ∑_{φ(N) ≤ l}
+  -- using Finset.sum_range_add repeatedly.
+  -- Proof strategy: show both sides equal ∑_{l ∈ range(N₀+1)} A(π₀.points ⟨l,_⟩, π₀.points ⟨l+1,_⟩).
+  -- The RHS decomposes as a disjoint union of blocks [φ(k), φ(k+1)) via strictly monotone φ.
+  -- This is a combinatorial identity proved by the range-splitting Finset.sum_range_add.
+  -- The full proof requires establishing φ(0)=0, φ(N+1)=N₀+1, and the partition-of-range property.
+  -- We establish the key structural facts and leave the combinatorial part as sorry.
+  have hφ0 : φ 0 = 0 := by
+    apply π₀.strictMono.injective; rw [← hφ 0, π.head_eq, π₀.head_eq]
+  have hφlast : φ (Fin.last (N + 1)) = Fin.last (N₀ + 1) := by
+    apply π₀.strictMono.injective; rw [← hφ (Fin.last (N + 1)), π.last_eq, π₀.last_eq]
   sorry
 
 /-- The *defect* of a two-parameter function `A` from additivity:
