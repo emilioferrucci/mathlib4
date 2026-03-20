@@ -697,7 +697,58 @@ private lemma omega_max_tendsto_zero {ω : Control} {s t : ℝ} (hst : s ≤ t) 
     Filter.Tendsto (fun n => ⨆ k : Fin (N + 1),
       (ω ((f n).points k.castSucc) ((f n).points k.succ) : ℝ))
       Filter.atTop (nhds 0) := by
-  sorry
+  rw [Metric.tendsto_atTop]
+  intro ε hε
+  obtain ⟨δ, hδ_pos, hδ⟩ := ω.unif_diag_cont hst ε hε
+  rw [Metric.tendsto_atTop] at hmesh
+  obtain ⟨M, hM⟩ := hmesh δ hδ_pos
+  refine ⟨M, fun n hn => ?_⟩
+  have hmesh_n : (f n).mesh < δ := by
+    have h := hM n hn
+    simp only [Real.dist_eq, sub_zero] at h
+    exact lt_of_abs_lt h
+  -- Show iSup ≤ ε by bounding each term
+  rw [Real.dist_eq, sub_zero]
+  -- Helper: each partition point is in [s, t]
+  have hpts_s : ∀ j : Fin (N + 2), s ≤ (f n).points j := fun j => by
+    have := (f n).strictMono.monotone (Fin.zero_le j)
+    simp only [(f n).head_eq] at this; exact this
+  have hpts_t : ∀ j : Fin (N + 2), (f n).points j ≤ t := fun j => by
+    have := (f n).strictMono.monotone (Fin.le_last j)
+    simp only [(f n).last_eq] at this; exact this
+  have hbdd : BddAbove (Set.range (fun k : Fin (N + 1) =>
+      (ω ((f n).points k.castSucc) ((f n).points k.succ) : ℝ))) := by
+    refine ⟨(ω s t : ℝ), fun x ⟨k, hk⟩ => hk ▸ ?_⟩
+    have hkle : (f n).points k.castSucc ≤ (f n).points k.succ :=
+      le_of_lt ((f n).strictMono Fin.castSucc_lt_succ)
+    have h1 := ω.mono_left (hpts_s k.castSucc) (hpts_t k.castSucc)
+    have h2 := ω.mono_right hkle (hpts_t k.succ)
+    exact_mod_cast h2.trans h1
+  -- The mesh of the partition bounds each sub-interval length
+  have hmesh_bdd : BddAbove (Set.range (fun k : Fin (N + 1) =>
+      (f n).points k.succ - (f n).points k.castSucc)) := by
+    refine ⟨t - s, fun x hx => ?_⟩
+    obtain ⟨j, rfl⟩ := hx
+    simp only
+    linarith [hpts_s j.castSucc, hpts_t j.succ,
+      le_of_lt ((f n).strictMono (Fin.castSucc_lt_succ (i := j)))]
+  have hle_mesh : ∀ k : Fin (N + 1),
+      (f n).points k.succ - (f n).points k.castSucc ≤ (f n).mesh := fun k =>
+    le_ciSup hmesh_bdd k
+  have hnn : 0 ≤ ⨆ k : Fin (N + 1), (ω ((f n).points k.castSucc) ((f n).points k.succ) : ℝ) :=
+    Real.iSup_nonneg (fun k => by positivity)
+  rw [abs_of_nonneg hnn]
+  have hlt : ∀ k : Fin (N + 1),
+      (ω ((f n).points k.castSucc) ((f n).points k.succ) : ℝ) < ε := fun k =>
+    hδ (hpts_s k.castSucc)
+      (le_of_lt ((f n).strictMono (Fin.castSucc_lt_succ (i := k))))
+      (hpts_t k.succ)
+      (lt_of_le_of_lt (hle_mesh k) hmesh_n)
+  -- iSup of a finite type with all values < ε is < ε
+  rw [← sSup_range]
+  rw [Set.Finite.csSup_lt_iff (Set.finite_range _) (Set.range_nonempty _)]
+  rintro _ ⟨k, rfl⟩
+  exact hlt k
 
 /-- **Sewing lemma.** Let `A : ℝ → ℝ → ℝ` be a two-parameter function satisfying the
 *germ bound* `|δA(s, u, t)| ≤ ω(s, t)^θ` for some control `ω` and exponent `θ > 1`.
