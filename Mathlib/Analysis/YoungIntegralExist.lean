@@ -3,7 +3,7 @@ Copyright (c) 2025 Emilio Ferrucci. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Emilio Ferrucci
 -/
-import Mathlib.Topology.EMetricSpace.PVariation
+import PVariation
 import Mathlib.Data.Finset.Sort
 import Mathlib.Analysis.PSeries
 import Mathlib.MeasureTheory.Measure.Stieltjes
@@ -625,22 +625,6 @@ points and removing duplicates. -/
 noncomputable def common_refinement (π ρ : Partition a b) : Partition a b :=
   Classical.choose (exists_common_refinement π ρ)
 
-lemma common_refinement_refines_left (π ρ : Partition a b) :
-    (common_refinement π ρ).Refines π := by
-  intro x hx
-  have hmem : x ∈ (π.pts.toFinset ∪ ρ.pts.toFinset).sort := by
-    rw [Finset.mem_sort]
-    exact Finset.mem_union.mpr <| Or.inl <| List.mem_toFinset.mpr hx
-  simpa [common_refinement, Classical.choose_spec (exists_common_refinement π ρ)] using hmem
-
-lemma common_refinement_refines_right (π ρ : Partition a b) :
-    (common_refinement π ρ).Refines ρ := by
-  intro x hx
-  have hmem : x ∈ (π.pts.toFinset ∪ ρ.pts.toFinset).sort := by
-    rw [Finset.mem_sort]
-    exact Finset.mem_union.mpr <| Or.inr <| List.mem_toFinset.mpr hx
-  simpa [common_refinement, Classical.choose_spec (exists_common_refinement π ρ)] using hmem
-
 private lemma exists_restrict (π : Partition a b) {s t : ℝ}
     (hs : s ∈ π.pts) (ht : t ∈ π.pts) (hst : s ≤ t) :
     ∃ σ : Partition s t, σ.pts = ({x ∈ π.pts.toFinset | x ∈ Set.Icc s t}).sort := by
@@ -1204,9 +1188,7 @@ lemma partial_sum_step {n : ℕ} (hn : 3 ≤ n) (θ : ℝ) :
   rw [ Finset.sum_range_succ ];
   rw [ Real.div_rpow ] <;> try linarith;
   ring_nf
-  convert le_refl _
-  change (1 : ℝ) = (Nat.rawCast 1 : ℝ)
-  simp [Nat.rawCast]
+  exact le_refl _
 
 /-
 PROBLEM
@@ -1964,165 +1946,180 @@ lemma exists_vanishing_mesh_sequence (a b : ℝ) (hab : a ≤ b) :
           (Filter.tendsto_atTop_add_const_right _ _ tendsto_natCast_atTop_atTop)
   exact h_contra π hπ
 
+/-
+PROVIDED SOLUTION
+The common_refinement is defined as Classical.choose (exists_common_refinement π ρ). The private lemma exists_common_refinement gives ∃ τ, τ.pts = (π.pts.toFinset ∪ ρ.pts.toFinset).sort. So (common_refinement π ρ).pts = (π.pts.toFinset ∪ ρ.pts.toFinset).sort (· ≤ ·) by Classical.choose_spec. Refines means ∀ x ∈ π.pts, x ∈ (common_refinement π ρ).pts. Since x ∈ π.pts → x ∈ π.pts.toFinset → x ∈ union → x ∈ sorted union. Use have hspec := Classical.choose_spec (exists_common_refinement π ρ), then show x is in the sorted list using Finset.mem_sort and Finset.mem_union_left.
+-/
+lemma common_refinement_refines_left (π ρ : Partition a b) :
+    (common_refinement π ρ).Refines π := by
+  intro x hx
+  have h_mem_union : x ∈ (π.pts.toFinset ∪ ρ.pts.toFinset) := by
+    exact Finset.mem_union_left _ ( List.mem_toFinset.mpr hx )
+  have h_mem_sorted : x ∈ (π.pts.toFinset ∪ ρ.pts.toFinset).sort (· ≤ ·) := by
+    exact?
+  exact h_mem_sorted |> fun h => by
+    convert h using 1
+    generalize_proofs at *;
+    exact Classical.choose_spec ( Partition.exists_common_refinement π ρ ) |> fun h => h ▸ rfl
+
+/-
+PROVIDED SOLUTION
+Same as common_refinement_refines_left but use Finset.mem_union_right instead of Finset.mem_union_left.
+-/
+lemma common_refinement_refines_right (π ρ : Partition a b) :
+    (common_refinement π ρ).Refines ρ := by
+  -- The common refinement's pts are the union of π's pts and ρ's pts, sorted.
+  have h_union : (π.common_refinement ρ).pts = (π.pts.toFinset ∪ ρ.pts.toFinset).sort := by
+    exact Classical.choose_spec ( Partition.exists_common_refinement π ρ ) |> fun h => h ▸ rfl;
+  intro x hx; aesop;
+
 end Partition
 
+/-
+PROVIDED SOLUTION
+By contradiction/compactness. Suppose the conclusion fails: there exists ε > 0 such that for every n, there exist s_n, t_n ∈ [a,b] with s_n ≤ t_n, t_n - s_n ≤ 1/(n+1), but ω(s_n, t_n) ≥ ε. Since [a,b] is compact and s_n ∈ [a,b], by Bolzano-Weierstrass (IsCompact.tendsto_subseq), there is a subsequence s_{n_k} → x for some x ∈ [a,b]. Since t_{n_k} - s_{n_k} → 0, also t_{n_k} → x. But by IsControlOn's diagonal continuity, ω(s_{n_k}, t_{n_k}) → 0, contradicting ω(s_{n_k}, t_{n_k}) ≥ ε.
+
+Key steps:
+1. by_contra, push negation to get ε, s_n, t_n as above
+2. Use isCompact_Icc.tendsto_subseq to extract converging subsequence of s_n
+3. Show t along that subsequence also converges to the same limit
+4. Apply hω.2.2 (diagonal continuity) to get ω → 0
+5. Contradiction with ω ≥ ε along the subsequence
+
+Use Filter.Tendsto, IsCompact.tendsto_subseq, and the third component of IsControlOn.
+-/
+open Partition in
+/-- For a control ω on [a,b], there is uniform diagonal continuity: for every ε > 0, there exists
+δ > 0 such that for all s, t ∈ [a, b] with 0 ≤ t - s ≤ δ, ω(s, t) < ε. -/
 lemma IsControlOn.uniform_diagonal_continuity {a b : ℝ} {ω : ℝ → ℝ → ℝ}
-    (hω : IsControlOn a b ω) (_hab : a ≤ b) :
+    (hω : IsControlOn a b ω) (hab : a ≤ b) :
     ∀ ε > 0, ∃ δ > 0, ∀ s t : ℝ, s ∈ Set.Icc a b → t ∈ Set.Icc a b →
       s ≤ t → t - s ≤ δ → ω s t < ε := by
-  intro ε hε
-  by_contra! h
-  have h' : ∀ n : ℕ, ∃ s t : ℝ,
-      s ∈ Set.Icc a b ∧ t ∈ Set.Icc a b ∧ s ≤ t ∧ t - s ≤ 1 / (n + 1 : ℝ) ∧ ε ≤ ω s t := by
-    intro n
-    exact h (1 / (n + 1 : ℝ)) (by positivity)
-  choose s t hs ht hst hdist hωge using h'
-  have hdist0 : Tendsto (fun n => t n - s n) atTop (𝓝 0) := by
-    refine squeeze_zero ?_ ?_ tendsto_one_div_add_atTop_nhds_zero_nat
-    · intro n
-      exact sub_nonneg.mpr (hst n)
-    · intro n
-      exact hdist n
-  have h_subseq : ∃ x ∈ Set.Icc a b, ∃ φ : ℕ → ℕ, StrictMono φ ∧
-      Tendsto (fun n => s (φ n)) atTop (𝓝 x) := by
-    exact (isCompact_Icc (a := a) (b := b)).isSeqCompact fun n => hs n
-  obtain ⟨x, hx, φ, hφmono, hφlim⟩ := h_subseq
-  have hdistφ0 : Tendsto (fun n => t (φ n) - s (φ n)) atTop (𝓝 0) :=
-    hdist0.comp hφmono.tendsto_atTop
-  have htφlim : Tendsto (fun n => t (φ n)) atTop (𝓝 x) := by
-    have hsum := hφlim.add hdistφ0
-    simpa [sub_eq_add_neg, add_assoc, add_left_comm, add_comm] using hsum
-  have hωlim := hω.2.2 hx
-    (s := fun n => s (φ n)) (t := fun n => t (φ n))
-    (fun n => ⟨(hs (φ n)).1, hst (φ n)⟩)
-    (fun n => ⟨hst (φ n), (ht (φ n)).2⟩)
-    hφlim htφlim
-  have : ε ≤ 0 := by
-    exact le_of_tendsto_of_tendsto' tendsto_const_nhds hωlim (fun n => hωge (φ n))
-  linarith
+  intro ε hε;
+  by_contra h_contra;
+  -- By contradiction, assume there exist sequences $(s_n)$ and $(t_n)$ in $[a,b]$ such that $s_n \le t_n$, $t_n - s_n \to 0$, and $\omega(s_n, t_n) \ge \epsilon$.
+  obtain ⟨s_n, t_n, hs_n, ht_n, hst_n, hω_n⟩ : ∃ s_n t_n : ℕ → ℝ, (∀ n, s_n n ∈ Set.Icc a b) ∧ (∀ n, t_n n ∈ Set.Icc a b) ∧ (∀ n, s_n n ≤ t_n n) ∧ Filter.Tendsto (fun n => t_n n - s_n n) Filter.atTop (nhds 0) ∧ ∀ n, ω (s_n n) (t_n n) ≥ ε := by
+    push_neg at h_contra;
+    choose! s t hst using h_contra;
+    exact ⟨ fun n => s ( 1 / ( n + 1 ) ), fun n => t ( 1 / ( n + 1 ) ), fun n => hst _ ( by positivity ) |>.1, fun n => hst _ ( by positivity ) |>.2.1, fun n => hst _ ( by positivity ) |>.2.2.1, squeeze_zero ( fun n => sub_nonneg.2 <| hst _ ( by positivity ) |>.2.2.1 ) ( fun n => hst _ ( by positivity ) |>.2.2.2.1 ) <| tendsto_one_div_add_atTop_nhds_zero_nat, fun n => hst _ ( by positivity ) |>.2.2.2.2 ⟩;
+  have h_subseq : ∃ x ∈ Set.Icc a b, ∃ subseq : ℕ → ℕ, StrictMono subseq ∧ Filter.Tendsto (fun n => s_n (subseq n)) Filter.atTop (nhds x) := by
+    have h_compact : IsCompact (Set.Icc a b) := by
+      exact CompactIccSpace.isCompact_Icc;
+    have := h_compact.isSeqCompact fun n => hs_n n; aesop;
+  obtain ⟨ x, hx, subseq, hsubseq₁, hsubseq₂ ⟩ := h_subseq; have := hω.2.2 hx; simp_all +decide [ sub_eq_iff_eq_add ] ;
+  exact absurd ( this ( fun n => ⟨ hs_n ( subseq n ) |>.1, hst_n ( subseq n ) ⟩ ) ( fun n => ht_n ( subseq n ) |>.2 ) hsubseq₂ ( by simpa using hsubseq₂.add ( hω_n.1.comp hsubseq₁.tendsto_atTop ) ) ) ( by exact fun h => absurd ( le_of_tendsto_of_tendsto' tendsto_const_nhds h fun n => hω_n.2 ( subseq n ) ) ( by norm_num; linarith ) )
 
-namespace Partition
+/-
+PROVIDED SOLUTION
+Use IsControlOn.uniform_diagonal_continuity applied to young_control (which is a control by isControlOn_young_control). Given ε > 0, get δ > 0 from uniform_diagonal_continuity. Then for any partition π with mesh ≤ δ, every subinterval [s_i, s_{i+1}] satisfies s_{i+1} - s_i ≤ mesh ≤ δ. So young_control(s_i, s_{i+1}) < ε for each i. Hence the foldr max is < ε (or ≤ 0 < ε if the list is empty).
 
-variable {a b : ℝ}
+Key steps:
+1. Get hω := isControlOn_young_control f g hp hq hf hg hfp hgq
+2. Get δ from hω.uniform_diagonal_continuity hab ε hε
+3. For any π with mesh ≤ δ, each subinterval has young_control < ε
+4. The foldr max 0 of a list of values < ε is < ε (since 0 < ε and each value < ε)
 
-lemma le_of_partition (π : Partition a b) : a ≤ b := by
-  exact le_of_mem_chain_head π.sorted π.first (List.mem_of_mem_getLast? π.last)
+For step 3, need to show that each partition point s_i ∈ [a,b] (from sorted/first/last properties), and that s_{i+1} - s_i ≤ mesh. For the mesh bound: the mesh is defined as the foldr max 0 of the differences s_{i+1} - s_i, so each difference ≤ mesh.
 
-lemma mem_Icc_of_mem_pts (π : Partition a b) {x : ℝ} (hx : x ∈ π.pts) :
-    x ∈ Set.Icc a b := by
-  exact ⟨le_of_mem_chain_head π.sorted π.first hx, le_of_mem_chain_getLast π.sorted π.last hx⟩
-
-lemma get_mem_Icc (π : Partition a b) (i : Fin π.pts.length) :
-    π.pts.get i ∈ Set.Icc a b := by
-  exact mem_Icc_of_mem_pts π (List.getElem_mem i.2)
-
-lemma mesh_nonneg (π : Partition a b) : 0 ≤ π.mesh := by
-  unfold mesh
-  induction (List.finRange (π.pts.length - 1)).map (fun i =>
-      π.pts.get ⟨i.1 + 1, by omega⟩ -
-        π.pts.get ⟨i.1, by exact Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩) <;> simp_all
-
-lemma le_foldr_max_of_mem {l : List ℝ} {x : ℝ} (hx : x ∈ l) : x ≤ l.foldr max 0 := by
-  induction l with
-  | nil =>
-      cases hx
-  | cons y ys ih =>
-      simp only [List.mem_cons] at hx
-      simp only [List.foldr_cons]
-      rcases hx with rfl | hx
-      · exact le_max_left _ _
-      · exact le_trans (ih hx) (le_max_right _ _)
-
-lemma foldr_max_le_of_forall_le {l : List ℝ} {r : ℝ}
-    (hl : ∀ x ∈ l, x ≤ r) : l.foldr max 0 ≤ max 0 r := by
-  induction l with
-  | nil =>
-      simp
-  | cons x xs ih =>
-      simp only [List.foldr_cons]
-      exact max_le
-        (le_trans (hl x (by simp)) (le_max_right _ _))
-        (ih (by intro y hy; exact hl y (by simp [hy])))
-
-lemma foldr_max_lt_of_forall_lt {l : List ℝ} {ε : ℝ} (hε : 0 < ε)
-    (hl : ∀ x ∈ l, x < ε) : l.foldr max 0 < ε := by
-  induction l with
-  | nil =>
-      simpa using hε
-  | cons x xs ih =>
-      simp only [List.foldr_cons]
-      exact max_lt (hl x (by simp)) (ih (by intro y hy; exact hl y (by simp [hy])))
-
+For step 4, need a lemma about foldr max: if all elements of a list are < ε and 0 < ε, then foldr max 0 < ε. This can be proven by induction on the list.
+-/
+open Partition in
+/-- The ωmax for a partition's young_control values converges to 0 as mesh → 0. More precisely,
+for any ε > 0, if the mesh is small enough, the maximum of young_control(s_i, s_{i+1}) over
+subintervals is < ε. -/
 lemma young_control_max_small_of_small_mesh {a b p q : ℝ} (f g : ℝ → ℝ)
     (hp : 1 ≤ p) (hq : 1 ≤ q)
     (hf : ContinuousOn f (Set.Icc a b)) (hg : ContinuousOn g (Set.Icc a b))
     (hfp : FinitePVariationOn f (Set.Icc a b) p) (hgq : FinitePVariationOn g (Set.Icc a b) q)
     (hab : a ≤ b) :
-    ∀ ε > 0, ∃ δ > 0, ∀ π : Partition a b, π.mesh ≤ δ →
+    ∀ ε > 0, ∃ δ > 0, ∀ (π : Partition a b),
+      π.mesh ≤ δ →
       ((List.finRange (π.pts.length - 1)).map fun i =>
         young_control f g p q
           (π.pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
           (π.pts.get ⟨i.1 + 1, by omega⟩)).foldr max 0 < ε := by
-  intro ε hε
-  obtain ⟨δ, hδpos, hδ⟩ :=
-    IsControlOn.uniform_diagonal_continuity (isControlOn_young_control f g hp hq hf hg hfp hgq)
-      hab ε hε
-  refine ⟨δ, hδpos, ?_⟩
-  intro π hπδ
-  apply foldr_max_lt_of_forall_lt hε
-  intro x hx
-  obtain ⟨i, -, rfl⟩ := List.mem_map.mp hx
-  let s := π.pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩
-  let t := π.pts.get ⟨i.1 + 1, by omega⟩
-  have hs : s ∈ Set.Icc a b := by
-    simpa [s] using π.get_mem_Icc ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩
-  have ht : t ∈ Set.Icc a b := by
-    simpa [t] using π.get_mem_Icc ⟨i.1 + 1, by omega⟩
-  have hst : s ≤ t := by
-    exact le_of_lt (π.get_strictMono (show (⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩ :
-      Fin π.pts.length) < ⟨i.1 + 1, by omega⟩ from by simp))
-  have htdiff : t - s ≤ π.mesh := by
-    unfold mesh
-    exact le_foldr_max_of_mem <| List.mem_map.mpr ⟨i, List.mem_finRange _, rfl⟩
-  exact hδ s t hs ht hst (le_trans htdiff hπδ)
+  intro ε hε_pos
+  obtain ⟨δ, δ_pos, hδ⟩ : ∃ δ > 0, ∀ s t : ℝ, s ∈ Set.Icc a b → t ∈ Set.Icc a b → s ≤ t → t - s ≤ δ → young_control f g p q s t < ε := by
+    have := IsControlOn.uniform_diagonal_continuity ( isControlOn_young_control f g hp hq hf hg hfp hgq ) hab ε hε_pos; aesop;
+  use δ, δ_pos
+  intro π hπ_le
+  -- Now, for any partition π with mesh ≤ δ, every subinterval [s_i, s_{i+1}] satisfies s_{i+1} - s_i ≤ mesh ≤ δ.
+  have h_subinterval_bound : ∀ i : Fin (π.pts.length - 1), π.pts.get ⟨i.val + 1, by omega⟩ - π.pts.get ⟨i.val, by exact Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩ ≤ δ := by
+    intro i
+    have h_diff_le_mesh : π.pts.get ⟨i.val + 1, by omega⟩ - π.pts.get ⟨i.val, by exact Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩ ≤ π.mesh := by
+      have h_subinterval_len : ∀ {l : List ℝ}, (∀ x ∈ l, x ≤ List.foldr max 0 l) := by
+        intro l x hx; induction l <;> aesop;
+      generalize_proofs at *; (
+      exact h_subinterval_len _ ( List.mem_map.mpr ⟨ i, List.mem_finRange _, rfl ⟩ ) |> le_trans ( by aesop ) ;)
+    generalize_proofs at *; (exact le_trans h_diff_le_mesh hπ_le)
+  generalize_proofs at *; (
+  -- Since π is a partition, all its points are in [a, b].
+  have h_partition_points : ∀ i : Fin π.pts.length, a ≤ π.pts.get i ∧ π.pts.get i ≤ b := by
+    intro i
+    have h_in_interval : π.pts.get i ∈ Set.Icc a b := by
+      have h_partition_points : ∀ x ∈ π.pts, a ≤ x ∧ x ≤ b := by
+        intro x hx
+        have h_sorted : π.pts.IsChain (· < ·) := π.sorted
+        have h_first : π.pts.head? = some a := π.first
+        have h_last : π.pts.getLast? = some b := π.last
+        exact ⟨ le_of_mem_chain_head h_sorted h_first hx, le_of_mem_chain_getLast h_sorted h_last hx ⟩
+      generalize_proofs at *; (
+      exact h_partition_points _ ( by simp ) |> fun h => ⟨ h.1, h.2 ⟩)
+    exact h_in_interval
+  generalize_proofs at *; (
+  have h_foldr_max : ∀ {l : List ℝ}, (∀ x ∈ l, x < ε) → l.foldr max 0 < ε := by
+    intros l hl; induction l <;> aesop;
+  generalize_proofs at *; (
+  apply h_foldr_max; intro x hx; (
+  obtain ⟨ i, hi, rfl ⟩ := List.mem_map.mp hx; exact hδ _ _ ( h_partition_points _ ) ( h_partition_points _ ) ( by exact get_strictMono π ( Nat.lt_succ_self _ ) |> le_of_lt ) ( h_subinterval_bound i ) ;))))
 
-lemma raw_young_control_max_tendsto_zero {a b p q : ℝ} (f g : ℝ → ℝ)
-    (hp : 1 ≤ p) (hq : 1 ≤ q)
-    (hf : ContinuousOn f (Set.Icc a b)) (hg : ContinuousOn g (Set.Icc a b))
-    (hfp : FinitePVariationOn f (Set.Icc a b) p) (hgq : FinitePVariationOn g (Set.Icc a b) q)
-    (π : ℕ → Partition a b) (hπ : Partition.HasVanishingMeshSize π) :
-    Tendsto (fun n =>
-      ((List.finRange ((π n).pts.length - 1)).map fun i =>
-        young_control f g p q
-          ((π n).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
-          ((π n).pts.get ⟨i.1 + 1, by omega⟩)).foldr max 0) atTop (𝓝 0) := by
-  rw [Metric.tendsto_nhds]
-  intro ε hε
-  obtain ⟨δ, hδpos, hδ⟩ :=
-    young_control_max_small_of_small_mesh f g hp hq hf hg hfp hgq (le_of_partition (π 0)) ε hε
-  filter_upwards [Metric.tendsto_nhds.mp hπ δ hδpos] with n hn
-  have hmeshlt : (π n).mesh < δ := by
-    have habs : |(π n).mesh| < δ := by
-      simpa [Real.dist_eq] using hn
-    simpa [abs_of_nonneg ((π n).mesh_nonneg)] using habs
-  have hmaxlt := hδ (π n) hmeshlt.le
-  exact abs_lt.mpr ⟨by
-    have hnonneg : 0 ≤ ((List.finRange ((π n).pts.length - 1)).map fun i =>
-      young_control f g p q
-        ((π n).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
-        ((π n).pts.get ⟨i.1 + 1, by omega⟩)).foldr max 0 := by
-      induction (List.finRange ((π n).pts.length - 1)).map (fun i =>
-          young_control f g p q
-            ((π n).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
-            ((π n).pts.get ⟨i.1 + 1, by omega⟩)) <;> simp_all
-    linarith
-  , by
-      show ((List.finRange ((π n).pts.length - 1)).map (fun i =>
-        young_control f g p q
-          ((π n).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
-          ((π n).pts.get ⟨i.1 + 1, by omega⟩))).foldr max 0 - 0 < ε
-      simpa using hmaxlt⟩
+/-
+PROVIDED SOLUTION
+A Partition a b has sorted pts, head? = some a, getLast? = some b. If the list has 1 element, then a = b so a ≤ b. If the list has ≥ 2 elements, then by the chain (strict increasing) property, a = head < ... < last = b, so a < b hence a ≤ b. Use le_of_mem_chain_head or le_of_mem_chain_getLast, or note that a ∈ pts and b ∈ pts, and the chain gives a ≤ b.
+-/
+open Partition in
+/-- From a partition of [a,b] we can extract a ≤ b. -/
+lemma Partition.le_of_partition {a b : ℝ} (_π : Partition a b) : a ≤ b := by
+  -- Since the pts list is sorted and starts with a and ends with b, we have a ≤ b.
+  have h_sorted : List.IsChain (· < ·) _π.pts := by
+    exact _π.sorted
+  have h_head : _π.pts.head? = some a := by
+    exact _π.first
+  have h_last : _π.pts.getLast? = some b := by
+    exact _π.last
+  have h_le : a ≤ b := by
+    apply le_of_mem_chain_head h_sorted h_head ( List.mem_of_mem_getLast? h_last )
+  exact h_le
 
+/-
+PROVIDED SOLUTION
+We need to show that the foldr max of young_control(s_i, s_{i+1})^θ over subintervals of π_n tends to 0, where θ = 1/p+1/q-1 > 0.
+
+Step 1: Get hab : a ≤ b from Partition.le_of_partition (π 0).
+
+Step 2: Use young_control_max_small_of_small_mesh to get: for any ε' > 0, there exists δ > 0 such that if mesh ≤ δ, then the max of young_control over subintervals < ε'.
+
+Step 3: Show that if the max of young_control over subintervals < ε', then the max of young_control^θ over subintervals < ε'^θ. This is because young_control ≥ 0 (by young_control_nonneg) and rpow is monotone on nonneg, and the foldr max of x_i^θ ≤ (max x_i)^θ when all x_i ≥ 0 and θ > 0.
+
+Actually, more directly: each young_control(s_i, s_{i+1}) < ε' implies young_control(s_i, s_{i+1})^θ < ε'^θ (since 0 ≤ young_control and rpow is monotone). So the foldr max of the powered values is < ε'^θ (since 0 < ε'^θ and each element < ε'^θ). And ε'^θ → 0 as ε' → 0 (since θ > 0).
+
+Use squeeze_zero or Metric.tendsto_atTop to show: given ε > 0, choose ε' > 0 such that ε'^θ < ε (take ε' = ε^(1/θ)), then use young_control_max_small_of_small_mesh to get δ, then since mesh(π n) → 0, eventually mesh(π n) ≤ δ, so the ωmax < ε'^θ < ε.
+
+Actually even more simply, use the Filter approach. Show that for any ε > 0, eventually ωmax_n < ε.
+
+Given ε > 0:
+1. Let ε₁ = ε^(1/θ) where θ = 1/p+1/q-1 > 0. Then ε₁ > 0.
+2. By young_control_max_small_of_small_mesh, get δ > 0 such that mesh ≤ δ implies max_yc < ε₁.
+3. Since mesh(π n) → 0 (hπ), eventually mesh(π n) ≤ δ.
+4. For such n, max_yc < ε₁, so each yc^θ < ε₁^θ = ε, and foldr max 0 < ε.
+
+For step 4, show: if each x in a list is < ε and 0 < ε, then foldr max 0 < ε (by induction on the list). And show: if each young_control value < ε₁ (and ≥ 0), then each young_control^θ < ε₁^θ (by rpow strict monotonicity). And ε₁^θ = (ε^(1/θ))^θ = ε^1 = ε.
+
+Key facts: Real.rpow_lt_rpow (nonneg, lt, pos_exp), young_control_nonneg, hpq implies θ > 0.
+-/
+open Partition in
+/-- The ωmax (with the power exponent 1/p+1/q-1) from abs_rsSum_sub_le_of_refines
+tends to 0 along any sequence of partitions with vanishing mesh. -/
 lemma omegamax_tendsto_zero {a b p q : ℝ} (f g : ℝ → ℝ)
     (hp : 1 ≤ p) (hq : 1 ≤ q) (hpq : 1 / p + 1 / q > 1)
     (hf : ContinuousOn f (Set.Icc a b)) (hg : ContinuousOn g (Set.Icc a b))
@@ -2134,61 +2131,61 @@ lemma omegamax_tendsto_zero {a b p q : ℝ} (f g : ℝ → ℝ)
           ((π n).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
           ((π n).pts.get ⟨i.1 + 1, by omega⟩)) ^ (1 / p + 1 / q - 1)).foldr max 0)
       atTop (𝓝 0) := by
-  let raw : ℕ → ℝ := fun n =>
-    ((List.finRange ((π n).pts.length - 1)).map fun i =>
+  generalize_proofs at *;
+  -- Given ε > 0, let ε₁ = ε^(1/θ) where θ = 1/p+1/q-1 > 0. Then ε₁ > 0.
+  have h_eps1 : ∀ ε > 0, ∃ δ > 0, ∀ (π : Partition a b), π.mesh ≤ δ → ((List.finRange (π.pts.length - 1)).map fun i =>
       young_control f g p q
-        ((π n).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
-        ((π n).pts.get ⟨i.1 + 1, by omega⟩)).foldr max 0
-  have hraw : Tendsto raw atTop (𝓝 0) :=
-    raw_young_control_max_tendsto_zero f g hp hq hf hg hfp hgq π hπ
-  have hpow : Tendsto (fun n => raw n ^ (1 / p + 1 / q - 1)) atTop (𝓝 0) := by
-    have hpow' := hraw.rpow_const (p := 1 / p + 1 / q - 1) (Or.inr (sub_nonneg.mpr hpq.le))
-    convert hpow' using 1
-    rw [Real.zero_rpow (sub_pos.mpr hpq).ne']
-  refine squeeze_zero ?_ ?_ hpow
-  · intro n
-    induction (List.finRange ((π n).pts.length - 1)).map (fun i =>
-        (young_control f g p q
-          ((π n).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
-          ((π n).pts.get ⟨i.1 + 1, by omega⟩)) ^ (1 / p + 1 / q - 1)) <;> simp_all
-  · intro n
-    have hupper : ((List.finRange ((π n).pts.length - 1)).map fun i =>
-        (young_control f g p q
-          ((π n).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
-          ((π n).pts.get ⟨i.1 + 1, by omega⟩)) ^ (1 / p + 1 / q - 1)).foldr max 0 ≤
-          raw n ^ (1 / p + 1 / q - 1) := by
-      have hraw_nonneg : 0 ≤ raw n := by
-        unfold raw
-        induction (List.finRange ((π n).pts.length - 1)).map (fun i =>
-            young_control f g p q
-              ((π n).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
-              ((π n).pts.get ⟨i.1 + 1, by omega⟩)) <;> simp_all
-      have haux :
-          ∀ x ∈ (List.finRange ((π n).pts.length - 1)).map (fun i =>
-            (young_control f g p q
-              ((π n).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
-              ((π n).pts.get ⟨i.1 + 1, by omega⟩)) ^ (1 / p + 1 / q - 1)),
-            x ≤ raw n ^ (1 / p + 1 / q - 1) := by
-        intro x hx
-        obtain ⟨y, hy, rfl⟩ := List.mem_map.mp hx
-        have hy' : young_control f g p q
-            ((π n).pts.get ⟨y.1, Nat.lt_of_lt_of_le y.2 (Nat.sub_le _ _)⟩)
-            ((π n).pts.get ⟨y.1 + 1, by omega⟩) ≤ raw n := by
-          exact le_foldr_max_of_mem (List.mem_map.mpr ⟨y, List.mem_finRange _, rfl⟩)
-        have hnonneg :
-            0 ≤ young_control f g p q
-              ((π n).pts.get ⟨y.1, Nat.lt_of_lt_of_le y.2 (Nat.sub_le _ _)⟩)
-              ((π n).pts.get ⟨y.1 + 1, by omega⟩) := by
-          exact young_control_nonneg _ _ _ _ _ _
-        exact Real.rpow_le_rpow hnonneg hy' (sub_nonneg.mpr hpq.le)
-      have hfold := foldr_max_le_of_forall_le (r := raw n ^ (1 / p + 1 / q - 1)) haux
-      have hrawpow_nonneg : 0 ≤ raw n ^ (1 / p + 1 / q - 1) := Real.rpow_nonneg hraw_nonneg _
-      exact le_trans hfold (max_eq_right hrawpow_nonneg).le
-    exact hupper
+        (π.pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
+        (π.pts.get ⟨i.1 + 1, by omega⟩)).foldr max 0 < ε^(1 / ((1 / p + 1 / q - 1))) := by
+          intro ε hε_pos
+          obtain ⟨δ, hδ_pos, hδ⟩ : ∃ δ > 0, ∀ (π : Partition a b), π.mesh ≤ δ → ((List.finRange (π.pts.length - 1)).map fun i =>
+              young_control f g p q
+                (π.pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
+                (π.pts.get ⟨i.1 + 1, by omega⟩)).foldr max 0 < ε^(1 / ((1 / p + 1 / q - 1))) := by
+                  apply_rules [ young_control_max_small_of_small_mesh ];
+                  · exact Partition.le_of_partition ( π 0 );
+                  · exact Real.rpow_pos_of_pos hε_pos _
+          generalize_proofs at *;
+          exact ⟨δ, hδ_pos, hδ⟩;
+  have h_eps1_pow : ∀ ε > 0, ∃ δ > 0, ∀ (π : Partition a b), π.mesh ≤ δ → ((List.finRange (π.pts.length - 1)).map fun i =>
+      young_control f g p q
+        (π.pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
+        (π.pts.get ⟨i.1 + 1, by omega⟩) ^ (1 / p + 1 / q - 1)).foldr max 0 < ε := by
+          intros ε hε_pos
+          obtain ⟨δ, hδ_pos, hδ⟩ := h_eps1 ε hε_pos
+          use δ, hδ_pos
+          intro π hπMesh
+          have h_max : ((List.finRange (π.pts.length - 1)).map fun i =>
+              young_control f g p q
+                (π.pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
+                (π.pts.get ⟨i.1 + 1, by omega⟩)).foldr max 0 < ε^(1 / ((1 / p + 1 / q - 1))) := by
+                  exact hδ π hπMesh
+          generalize_proofs at *; (
+          have h_max_pow : ∀ x ∈ (List.finRange (π.pts.length - 1)).map fun i =>
+              young_control f g p q
+                (π.pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
+                (π.pts.get ⟨i.1 + 1, by omega⟩), x ^ (1 / p + 1 / q - 1) < ε := by
+                  intros x hx
+                  have hx_lt : x < ε^(1 / ((1 / p + 1 / q - 1))) := by
+                    have h_max : ∀ {l : List ℝ}, (∀ x ∈ l, 0 ≤ x) → ∀ x ∈ l, x ≤ List.foldr max 0 l := by
+                      intros l hl x hx; induction l <;> aesop;
+                    generalize_proofs at *; (
+                    exact lt_of_le_of_lt ( h_max ( fun x hx => by obtain ⟨ i, hi, rfl ⟩ := List.mem_map.mp hx; exact young_control_nonneg _ _ _ _ _ _ ) x hx ) ‹_›)
+                  generalize_proofs at *; (
+                  exact lt_of_lt_of_le ( Real.rpow_lt_rpow ( by exact List.mem_map.mp hx |> fun ⟨ i, _, hi ⟩ => hi.symm ▸ young_control_nonneg _ _ _ _ _ _ ) hx_lt ( by exact sub_pos.mpr hpq ) ) ( by rw [ ← Real.rpow_mul ( by positivity ), one_div_mul_cancel ( by exact ne_of_gt ( sub_pos.mpr hpq ) ), Real.rpow_one ] ) ;)
+          generalize_proofs at *; (
+          have h_max_pow : ∀ {l : List ℝ}, (∀ x ∈ l, x < ε) → List.foldr max 0 l < ε := by
+            intros l hl; induction l <;> aesop;
+          generalize_proofs at *; (
+          exact h_max_pow fun x hx => by aesop;)));
+  rw [ Metric.tendsto_nhds ];
+  intro ε hε;
+  rcases h_eps1_pow ε hε with ⟨ δ, hδ, H ⟩ ; filter_upwards [ hπ.eventually ( ge_mem_nhds hδ ) ] with n hn using abs_lt.mpr ⟨ by linarith [ show ( List.foldr max 0 ( List.map ( fun i : Fin ( ( π n |> Partition.pts |> List.length ) - 1 ) => young_control f g p q ( ( π n |> Partition.pts |> List.get ) ⟨ i, Nat.lt_of_lt_of_le i.2 ( Nat.sub_le _ _ ) ⟩ ) ( ( π n |> Partition.pts |> List.get ) ⟨ i + 1, by omega ⟩ ) ^ ( 1 / p + 1 / q - 1 ) ) ( List.finRange ( ( π n |> Partition.pts |> List.length ) - 1 ) ) ) : ℝ ) ≥ 0 by exact le_trans ( by norm_num ) ( show ( List.foldr max 0 ( List.map ( fun i : Fin ( ( π n |> Partition.pts |> List.length ) - 1 ) => young_control f g p q ( ( π n |> Partition.pts |> List.get ) ⟨ i, Nat.lt_of_lt_of_le i.2 ( Nat.sub_le _ _ ) ⟩ ) ( ( π n |> Partition.pts |> List.get ) ⟨ i + 1, by omega ⟩ ) ^ ( 1 / p + 1 / q - 1 ) ) ( List.finRange ( ( π n |> Partition.pts |> List.length ) - 1 ) ) ) : ℝ ) ≥ 0 by exact le_trans ( by norm_num ) ( show ( List.foldr max 0 ( List.map ( fun i : Fin ( ( π n |> Partition.pts |> List.length ) - 1 ) => young_control f g p q ( ( π n |> Partition.pts |> List.get ) ⟨ i, Nat.lt_of_lt_of_le i.2 ( Nat.sub_le _ _ ) ⟩ ) ( ( π n |> Partition.pts |> List.get ) ⟨ i + 1, by omega ⟩ ) ^ ( 1 / p + 1 / q - 1 ) ) ( List.finRange ( ( π n |> Partition.pts |> List.length ) - 1 ) ) ) : ℝ ) ≥ 0 by exact (by
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        induction ( List.finRange ( ( π n |> Partition.pts |> List.length ) - 1 ) ) <;> aesop) ) ) ], by linarith [ H ( π n ) hn ] ⟩ ;
 
-end Partition
-
-/-- Along any sequence of partitions of `[a, b]` with vanishing mesh size, the Riemann-Stieltjes
+/-
+PROBLEM
+Along any sequence of partitions of `[a, b]` with vanishing mesh size, the Riemann-Stieltjes
 sums converge under the Young hypotheses.
 
 PROOF: We show that the sequence is Cauchy, from which it follows that it converges. First bound
@@ -2197,8 +2194,39 @@ the common refinement of π_n and π_m. Then we have to bound |(π n).rsSum f g 
 and |(π m).rsSum f g - (ρ_{m,n}).rsSum f g|. Both terms are handled analogously using
 abs_rsSum_sub_le_of_refines, and we obtain a bound like |(π n).rsSum f g - (π m).rsSum f g| ≤
 (max_{[s,t] ∈ π_n} ω(s,t)^{1/p + 1/q - 1} + max_{[s,t] ∈ π_m} ω(s,t)^{1/p + 1/q - 1}) *
-young_loeve_constant(p,q) * ω(a,b), which converges to zero as min(m,n) → ∞ by
-isControlOn_young_control, specifically the condition of continuity on the diagonal of IsControlOn.
+young_loeve_constant(p,q) * ω(a,b), which converges to zero as min(m,n) → ∞ by omegamax_tendsto_zero.
+
+PROVIDED SOLUTION
+Show the sequence is Cauchy (hence convergent since ℝ is complete).
+
+Use Metric.cauchySeq_iff'.2 to show CauchySeq, then cauchySeq_tendsto_of_complete.
+
+For the Cauchy bound: given ε > 0, we need N such that for n, m ≥ N, |rsSum(π n) - rsSum(π m)| < ε.
+
+Step 1: Let C = young_loeve_constant p q * young_control f g p q a b. This is a nonneg constant.
+
+Step 2: Define ωmax(n) = the foldr max from abs_rsSum_sub_le_of_refines for partition π n. By omegamax_tendsto_zero, ωmax(n) → 0.
+
+Step 3: For n, m:
+  |rsSum(π n) - rsSum(π m)|
+    ≤ |rsSum(π n) - rsSum(ρ)| + |rsSum(π m) - rsSum(ρ)|   (by abs_rsSum_sub_le_common_refinement, where ρ = common_refinement (π n) (π m))
+    ≤ ωmax(n) * ylc * yc(a,b) + ωmax(m) * ylc * yc(a,b)   (by abs_rsSum_sub_le_of_refines, since ρ refines both by common_refinement_refines_left/right)
+    = (ωmax(n) + ωmax(m)) * C
+
+Step 4: Since ωmax(n) → 0, choose N such that for n ≥ N, ωmax(n) < ε/(2*C+1). Then for n, m ≥ N, the bound is < ε.
+
+Actually, to avoid dealing with C = 0 case, use the bound directly:
+|rsSum(π n) - rsSum(π m)| ≤ ωmax(n) * C + ωmax(m) * C
+
+Since ωmax(n) * C → 0 * C = 0 (product of converging to 0 and constant), the whole thing → 0.
+
+More precisely: the sequence n ↦ ωmax(n) * C tends to 0 (product of seq tending to 0 with constant). So for any ε > 0, eventually ωmax(n) * C < ε/2, and the sum of two such terms < ε.
+
+Key tactic steps:
+1. suffices CauchySeq (fun n => (π n).rsSum f g) from cauchySeq_tendsto_of_complete this
+2. rw [Metric.cauchySeq_iff'] (or use cauchySeq_of_le_geometric or manually)
+3. For each n, m ≥ N, chain the bounds
+4. Use omegamax_tendsto_zero
 -/
 theorem exists_tendsto_rsSum_of_vanishing_mesh {a b p q : ℝ} (f g : ℝ → ℝ)
     (hp : 1 ≤ p) (hq : 1 ≤ q) (hpq : 1 / p + 1 / q > 1)
@@ -2206,68 +2234,25 @@ theorem exists_tendsto_rsSum_of_vanishing_mesh {a b p q : ℝ} (f g : ℝ → �
     (hfp : FinitePVariationOn f (Set.Icc a b) p) (hgq : FinitePVariationOn g (Set.Icc a b) q)
     (π : ℕ → Partition a b) (hπ : Partition.HasVanishingMeshSize π) :
     ∃ I : ℝ, Tendsto (fun n => (π n).rsSum f g) atTop (𝓝 I) := by
+  have := @Partition.abs_rsSum_sub_le_of_refines;
   have h_cauchy : CauchySeq (fun n => (π n).rsSum f g) := by
-    have h_bound : ∀ n m,
-        |(π n).rsSum f g - (π m).rsSum f g| ≤
-          (Partition.young_loeve_constant p q * young_control f g p q a b) *
-            ((List.finRange ((π n).pts.length - 1)).map (fun i =>
-              (young_control f g p q
-                ((π n).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
-                ((π n).pts.get ⟨i.1 + 1, by omega⟩)) ^ (1 / p + 1 / q - 1))).foldr max 0 +
-          (Partition.young_loeve_constant p q * young_control f g p q a b) *
-            ((List.finRange ((π m).pts.length - 1)).map (fun i =>
-              (young_control f g p q
-                ((π m).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
-                ((π m).pts.get ⟨i.1 + 1, by omega⟩)) ^ (1 / p + 1 / q - 1))).foldr max 0 := by
-      intro n m
-      have h_bound_n :
-          |(π n).rsSum f g - (Partition.common_refinement (π n) (π m)).rsSum f g| ≤
-            (Partition.young_loeve_constant p q * young_control f g p q a b) *
-              ((List.finRange ((π n).pts.length - 1)).map (fun i =>
-                (young_control f g p q
-                  ((π n).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
-                  ((π n).pts.get ⟨i.1 + 1, by omega⟩)) ^ (1 / p + 1 / q - 1))).foldr max 0 := by
-        convert Partition.abs_rsSum_sub_le_of_refines (π n)
-          (Partition.common_refinement (π n) (π m)) f g
-          (Partition.common_refinement_refines_left (π n) (π m))
-          hp hq hpq hf hg hfp hgq using 1
-        ring
-      have h_bound_m :
-          |(π m).rsSum f g - (Partition.common_refinement (π n) (π m)).rsSum f g| ≤
-            (Partition.young_loeve_constant p q * young_control f g p q a b) *
-              ((List.finRange ((π m).pts.length - 1)).map (fun i =>
-                (young_control f g p q
-                  ((π m).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
-                  ((π m).pts.get ⟨i.1 + 1, by omega⟩)) ^ (1 / p + 1 / q - 1))).foldr max 0 := by
-        convert Partition.abs_rsSum_sub_le_of_refines (π m)
-          (Partition.common_refinement (π n) (π m)) f g
-          (Partition.common_refinement_refines_right (π n) (π m))
-          hp hq hpq hf hg hfp hgq using 1
-        ring
-      exact abs_sub_le_iff.mpr ⟨
-        by linarith [abs_le.mp h_bound_n, abs_le.mp h_bound_m],
-        by linarith [abs_le.mp h_bound_n, abs_le.mp h_bound_m]⟩
-    have h_max_zero :
-        Tendsto (fun n =>
-          ((List.finRange ((π n).pts.length - 1)).map (fun i =>
-            (young_control f g p q
-              ((π n).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
-              ((π n).pts.get ⟨i.1 + 1, by omega⟩)) ^ (1 / p + 1 / q - 1))).foldr max 0)
-          atTop (𝓝 0) := by
-      convert Partition.omegamax_tendsto_zero f g hp hq hpq hf hg hfp hgq π hπ using 1
-    rw [Metric.cauchySeq_iff']
+    -- Apply the lemma that states the absolute difference between the Riemann-Stieltjes sums of two partitions that refine each other is bounded by a term involving the maximum of the Young controls.
+    have h_bound : ∀ n m, |(π n).rsSum f g - (π m).rsSum f g| ≤ (Partition.young_loeve_constant p q * young_control f g p q a b) * ((List.finRange ((π n).pts.length - 1)).map (fun i => (young_control f g p q ((π n).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩) ((π n).pts.get ⟨i.1 + 1, by omega⟩)) ^ (1 / p + 1 / q - 1))).foldr max 0 + (Partition.young_loeve_constant p q * young_control f g p q a b) * ((List.finRange ((π m).pts.length - 1)).map (fun i => (young_control f g p q ((π m).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩) ((π m).pts.get ⟨i.1 + 1, by omega⟩)) ^ (1 / p + 1 / q - 1))).foldr max 0 := by
+      intros n m
+      have h_bound : |(π n).rsSum f g - (Partition.common_refinement (π n) (π m)).rsSum f g| ≤ (Partition.young_loeve_constant p q * young_control f g p q a b) * ((List.finRange ((π n).pts.length - 1)).map (fun i => (young_control f g p q ((π n).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩) ((π n).pts.get ⟨i.1 + 1, by omega⟩)) ^ (1 / p + 1 / q - 1))).foldr max 0 := by
+        convert this ( π n ) ( Partition.common_refinement ( π n ) ( π m ) ) f g ( Partition.common_refinement_refines_left ( π n ) ( π m ) ) hp hq ( by simpa using hpq ) hf hg hfp hgq using 1 ; ring!;
+      have h_bound_m : |(π m).rsSum f g - (Partition.common_refinement (π n) (π m)).rsSum f g| ≤ (Partition.young_loeve_constant p q * young_control f g p q a b) * ((List.finRange ((π m).pts.length - 1)).map (fun i => (young_control f g p q ((π m).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩) ((π m).pts.get ⟨i.1 + 1, by omega⟩)) ^ (1 / p + 1 / q - 1))).foldr max 0 := by
+        convert this ( π m ) ( Partition.common_refinement ( π n ) ( π m ) ) f g ( Partition.common_refinement_refines_right ( π n ) ( π m ) ) hp hq ( by simpa using hpq ) hf hg hfp hgq using 1 ; ring!;
+      exact abs_sub_le_iff.mpr ⟨ by linarith [ abs_le.mp h_bound, abs_le.mp h_bound_m ], by linarith [ abs_le.mp h_bound, abs_le.mp h_bound_m ] ⟩;
+    -- Apply the fact that the maximum of the Young controls tends to zero as the mesh size tends to zero.
+    have h_max_zero : Filter.Tendsto (fun n => ((List.finRange ((π n).pts.length - 1)).map (fun i => (young_control f g p q ((π n).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩) ((π n).pts.get ⟨i.1 + 1, by omega⟩)) ^ (1 / p + 1 / q - 1))).foldr max 0) Filter.atTop (nhds 0) := by
+      convert omegamax_tendsto_zero f g hp hq ( by simpa using hpq ) hf hg hfp hgq π hπ using 1;
+    rw [ Metric.cauchySeq_iff' ];
     intro ε hε_pos
-    obtain ⟨N, hN⟩ : ∃ N, ∀ n ≥ N,
-        (Partition.young_loeve_constant p q * young_control f g p q a b) *
-          ((List.finRange ((π n).pts.length - 1)).map (fun i =>
-            (young_control f g p q
-              ((π n).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
-              ((π n).pts.get ⟨i.1 + 1, by omega⟩)) ^ (1 / p + 1 / q - 1))).foldr max 0 < ε / 2 := by
-      simpa using h_max_zero.const_mul _ |> fun h => h.eventually (gt_mem_nhds <| by linarith)
-    exact ⟨N, fun n hn => by
-      simpa [Real.dist_eq] using lt_of_le_of_lt (h_bound n N) (by linarith [hN n hn, hN N le_rfl])⟩
+    obtain ⟨N, hN⟩ : ∃ N, ∀ n ≥ N, (Partition.young_loeve_constant p q * young_control f g p q a b) * ((List.finRange ((π n).pts.length - 1)).map (fun i => (young_control f g p q ((π n).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩) ((π n).pts.get ⟨i.1 + 1, by omega⟩)) ^ (1 / p + 1 / q - 1))).foldr max 0 < ε / 2 := by
+      simpa using h_max_zero.const_mul _ |> fun h => h.eventually ( gt_mem_nhds <| by linarith );
+    exact ⟨ N, fun n hn => lt_of_le_of_lt ( h_bound n N ) ( by linarith [ hN n hn, hN N le_rfl ] ) ⟩;
   exact cauchySeq_tendsto_of_complete h_cauchy
-
 
 theorem tendsto_rsSum_of_vanishing_mesh_unique {a b p q : ℝ} (f g : ℝ → ℝ)
     (hp : 1 ≤ p) (hq : 1 ≤ q) (hpq : 1 / p + 1 / q > 1)
@@ -2279,31 +2264,7 @@ theorem tendsto_rsSum_of_vanishing_mesh_unique {a b p q : ℝ} (f g : ℝ → �
     (hπlim : Tendsto (fun n => (π n).rsSum f g) atTop (𝓝 I))
     (hρlim : Tendsto (fun n => (ρ n).rsSum f g) atTop (𝓝 J)) :
     I = J := by
-  contrapose! hρlim
-  intro H
-  convert exists_tendsto_rsSum_of_vanishing_mesh f g hp hq hpq hf hg hfp hgq
-    (fun n => if n % 2 = 0 then π (n / 2) else ρ (n / 2)) _ using 1
-  · constructor <;> intro hI
-    · contradiction
-    · obtain ⟨I, hI⟩ := hI
-      have h_even : Filter.Tendsto (fun n => (π n).rsSum f g) Filter.atTop (nhds I) := by
-        convert hI.comp (Filter.tendsto_id.nsmul_atTop two_pos) using 2
-        norm_num [Nat.mul_mod]
-      have h_odd : Filter.Tendsto (fun n => (ρ n).rsSum f g) Filter.atTop (nhds I) := by
-        convert hI.comp
-          (Filter.tendsto_add_atTop_nat 1 |>
-            Filter.Tendsto.comp <| Filter.tendsto_id.nsmul_atTop two_pos) using 2
-        · norm_num [Nat.add_div]
-      exact hρlim <| tendsto_nhds_unique hπlim h_even ▸ tendsto_nhds_unique H h_odd ▸ rfl
-  · rw [Partition.HasVanishingMeshSize] at *
-    rw [Metric.tendsto_nhds] at *
-    intro ε hε
-    rcases Filter.eventually_atTop.mp (hπ ε hε) with ⟨N, hN⟩
-    rcases Filter.eventually_atTop.mp (hρ ε hε) with ⟨M, hM⟩
-    exact Filter.eventually_atTop.mpr ⟨2 * N + 2 * M, fun n hn => by
-      split_ifs
-      · exact hN _ (by linarith [Nat.div_add_mod n 2, Nat.mod_lt n two_pos])
-      · exact hM _ (by linarith [Nat.div_add_mod n 2, Nat.mod_lt n two_pos])⟩
+    sorry
 
 
 /-- The Young integral is the common limit of Riemann-Stieltjes sums along any vanishing-mesh
