@@ -1087,12 +1087,138 @@ theorem sewingLemma {A : ℝ → ℝ → ℝ} (ω : Control) {θ : ℝ} (hθ : 1
     mul_pos (Real.rpow_pos_of_pos (by norm_num : (0:ℝ) < 2) θ) hzeta_pos
   -- === Sorry'd combinatorial helpers ===
   have exists_partition : ∀ {s t : ℝ} (_ : s < t) (δ : ℝ) (_ : 0 < δ),
-      ∃ (N : ℕ) (π : Partition s t N), π.mesh < δ := by sorry
+      ∃ (N : ℕ) (π : Partition s t N), π.mesh < δ := by
+    intro s t hst δ hδ
+    -- Use N+1 equal subintervals where N = ⌈(t-s)/δ⌉ - 1
+    set n := Nat.ceil ((t - s) / δ) + 1 with hn_def
+    have hts_pos : 0 < t - s := sub_pos.mpr hst
+    have hn_pos : 0 < n := by omega
+    -- Build uniform partition with n+1 subintervals (n interior points)
+    -- Actually use n subintervals (n-1 interior points), so N = n - 1
+    set N := n - 1
+    have hn_eq : n = N + 1 := Nat.succ_pred_eq_of_pos hn_pos
+    -- Points: s + k * (t-s)/n for k = 0, ..., n = N+1
+    refine ⟨N, ⟨fun k => s + k.val * ((t - s) / n), ?_, ?_, ?_⟩, ?_⟩
+    · -- strictMono
+      intro a b hab
+      have hab' : (a.val : ℝ) < b.val := by exact_mod_cast hab
+      have hstep : 0 < (t - s) / (n : ℝ) := div_pos hts_pos (Nat.cast_pos.mpr hn_pos)
+      linarith [mul_lt_mul_of_pos_right hab' hstep]
+    · -- head_eq
+      simp
+    · -- last_eq
+      simp only [Fin.val_last]
+      have hn_cast : N + 1 = n := by omega
+      have : ((N + 1 : ℕ) : ℝ) = (n : ℝ) := by exact_mod_cast hn_cast
+      rw [this]; field_simp; ring
+    · -- mesh < δ
+      -- Each subinterval has length (t-s)/n
+      have hstep : 0 < (t - s) / (n : ℝ) := div_pos hts_pos (Nat.cast_pos.mpr hn_pos)
+      have hmesh_eq : ∀ k : Fin (N + 1),
+          (s + (k.succ).val * ((t - s) / (n : ℝ))) -
+          (s + (k.castSucc).val * ((t - s) / (n : ℝ))) = (t - s) / n := by
+        intro k
+        have : (k.succ).val = (k.castSucc).val + 1 := by
+          simp [Fin.val_succ, Fin.val_castSucc]
+        push_cast [this]; ring
+      have hall_eq : ∀ k : Fin (N + 1),
+          (s + (k.succ).val * ((t - s) / (n : ℝ))) -
+          (s + (k.castSucc).val * ((t - s) / (n : ℝ))) = (t - s) / n := hmesh_eq
+      have hiSup : (⨆ k : Fin (N + 1),
+          ((s + (k.succ).val * ((t - s) / (n : ℝ))) -
+           (s + (k.castSucc).val * ((t - s) / (n : ℝ))))) = (t - s) / n := by
+        have : (fun k : Fin (N + 1) =>
+          (s + (k.succ).val * ((t - s) / (n : ℝ))) -
+          (s + (k.castSucc).val * ((t - s) / (n : ℝ)))) = fun _ => (t - s) / n :=
+          funext hall_eq
+        rw [this, ciSup_const]
+      rw [Partition.mesh, hiSup]
+      have hn_cast : (0 : ℝ) < n := Nat.cast_pos.mpr hn_pos
+      rw [div_lt_iff₀ hn_cast]
+      have hle : (t - s) / δ < n := by
+        have h1 := Nat.le_ceil ((t - s) / δ)
+        have h3 : (⌈(t - s) / δ⌉₊ : ℝ) < (n : ℝ) := by
+          exact_mod_cast show ⌈(t - s) / δ⌉₊ < n by omega
+        linarith
+      have := (div_lt_iff₀ hδ).mp hle
+      linarith
   have common_refine : ∀ {s t : ℝ} (_ : s ≤ t) {N₁ N₂ : ℕ}
       (π₁ : Partition s t N₁) (π₂ : Partition s t N₂),
       ∃ (N₀ : ℕ) (π₀ : Partition s t N₀),
         (∀ k : Fin (N₁ + 2), ∃ j : Fin (N₀ + 2), π₁.points k = π₀.points j) ∧
-        (∀ k : Fin (N₂ + 2), ∃ j : Fin (N₀ + 2), π₂.points k = π₀.points j) := by sorry
+        (∀ k : Fin (N₂ + 2), ∃ j : Fin (N₀ + 2), π₂.points k = π₀.points j) := by
+    intro s t _hst N₁ N₂ π₁ π₂
+    -- Collect all points into a Finset
+    set S : Finset ℝ := (Finset.univ.image π₁.points) ∪ (Finset.univ.image π₂.points)
+    -- S has at least 2 elements
+    have hcard_ge2 : 2 ≤ S.card := by
+      have hne : π₁.points 0 ≠ π₁.points (Fin.last (N₁ + 1)) :=
+        ne_of_lt (π₁.strictMono (by simp [Fin.lt_def, Fin.val_last]))
+      calc 2 = ({π₁.points 0, π₁.points (Fin.last (N₁ + 1))} : Finset ℝ).card := by
+              rw [Finset.card_pair hne]
+        _ ≤ S.card := Finset.card_le_card (fun x hx => by
+            rcases Finset.mem_insert.mp hx with rfl | hx
+            · exact Finset.mem_union_left _ (Finset.mem_image.mpr ⟨0, Finset.mem_univ _, rfl⟩)
+            · exact Finset.mem_union_left _
+                (Finset.mem_image.mpr ⟨Fin.last _, Finset.mem_univ _,
+                  Finset.mem_singleton.mp hx ▸ rfl⟩))
+    set N₀ := S.card - 2
+    have hcard_eq : S.card = N₀ + 2 := by omega
+    set f := S.orderEmbOfFin hcard_eq
+    have hf_smono : StrictMono f := f.strictMono
+    have hs_mem : s ∈ S :=
+      Finset.mem_union_left _ (Finset.mem_image.mpr ⟨0, Finset.mem_univ _, π₁.head_eq⟩)
+    have ht_mem : t ∈ S :=
+      Finset.mem_union_left _ (Finset.mem_image.mpr ⟨Fin.last _, Finset.mem_univ _, π₁.last_eq⟩)
+    -- Helper: every element of S is ≥ s and ≤ t
+    have hS_bounds : ∀ x ∈ S, s ≤ x ∧ x ≤ t := by
+      intro x hx
+      rcases Finset.mem_union.mp hx with h | h
+      · obtain ⟨k, _, hk⟩ := Finset.mem_image.mp h
+        constructor
+        · have := π₁.strictMono.monotone (Fin.zero_le k); rw [π₁.head_eq] at this
+          linarith
+        · have := π₁.strictMono.monotone (Fin.le_last k); rw [π₁.last_eq] at this
+          linarith
+      · obtain ⟨k, _, hk⟩ := Finset.mem_image.mp h
+        constructor
+        · have := π₂.strictMono.monotone (Fin.zero_le k); rw [π₂.head_eq] at this
+          linarith
+        · have := π₂.strictMono.monotone (Fin.le_last k); rw [π₂.last_eq] at this
+          linarith
+    -- f maps into S
+    have hf_val : ∀ i, f i ∈ S := fun i => Finset.orderEmbOfFin_mem S hcard_eq i
+    -- f(index of x) = x for x ∈ S
+    have hf_surj : ∀ x ∈ S, ∃ i, f i = x := by
+      intro x hx
+      exact ⟨(S.orderIsoOfFin hcard_eq).symm ⟨x, hx⟩, by
+        simp [f, Finset.orderEmbOfFin, Finset.coe_orderIsoOfFin_apply,
+          OrderIso.apply_symm_apply]⟩
+    have hf0 : f 0 = s := by
+      apply le_antisymm
+      · obtain ⟨i, hi⟩ := hf_surj s hs_mem
+        calc f 0 ≤ f i := hf_smono.monotone (Fin.zero_le i)
+          _ = s := hi
+      · exact (hS_bounds _ (hf_val 0)).1
+    have hflast : f (Fin.last (N₀ + 1)) = t := by
+      apply le_antisymm
+      · exact (hS_bounds _ (hf_val (Fin.last (N₀ + 1)))).2
+      · obtain ⟨i, hi⟩ := hf_surj t ht_mem
+        calc t = f i := hi.symm
+          _ ≤ f (Fin.last (N₀ + 1)) := hf_smono.monotone (Fin.le_last i)
+    refine ⟨N₀, ⟨f, hf_smono, hf0, hflast⟩, ?_, ?_⟩
+    · intro k
+      have hk_mem : π₁.points k ∈ S :=
+        Finset.mem_union_left _ (Finset.mem_image.mpr ⟨k, Finset.mem_univ _, rfl⟩)
+      exact ⟨(S.orderIsoOfFin hcard_eq).symm ⟨π₁.points k, hk_mem⟩, by
+        simp [f, Finset.orderEmbOfFin, Finset.coe_orderIsoOfFin_apply,
+          OrderIso.apply_symm_apply]⟩
+    · intro k
+      have hk_mem : π₂.points k ∈ S :=
+        Finset.mem_union_right _ (Finset.mem_image.mpr ⟨k, Finset.mem_univ _, rfl⟩)
+      exact ⟨(S.orderIsoOfFin hcard_eq).symm ⟨π₂.points k, hk_mem⟩, by
+        simp [f, Finset.orderEmbOfFin, Finset.coe_orderIsoOfFin_apply,
+          OrderIso.apply_symm_apply]⟩
   -- === Cauchy property ===
   have cauchy : ∀ {s t : ℝ} (hst : s ≤ t), ∀ ε > 0, ∃ δ > 0,
       ∀ {N₁ N₂ : ℕ} (π₁ : Partition s t N₁) (π₂ : Partition s t N₂),
@@ -1201,7 +1327,101 @@ theorem sewingLemma {A : ℝ → ℝ → ℝ} (ω : Control) {θ : ℝ} (hθ : 1
   have limit_exists : ∀ {s t : ℝ} (hst : s ≤ t),
       ∃ L : ℝ, (|L - A s t| ≤ C * (ω s t : ℝ) ^ θ) ∧
       (∀ ε > 0, ∃ δ > 0, ∀ {N : ℕ} (π : Partition s t N), π.mesh < δ →
-        |π.riemannSum A - L| < ε) := by sorry
+        |π.riemannSum A - L| < ε) := by
+    intro s t hst
+    rcases eq_or_lt_of_le hst with rfl | hst'
+    · -- s = t: trivial partition, L = A s s
+      refine ⟨A s s, ?_, ?_⟩
+      · simp [ω.zero_diag, Real.zero_rpow (by linarith : θ ≠ 0)]
+      · intro ε hε; refine ⟨1, one_pos, fun {N} π _ => ?_⟩
+        -- Any partition with s = t must have all points equal to s
+        have hall : ∀ k, π.points k = s := by
+          intro k
+          have h1 := π.strictMono.monotone (Fin.zero_le k)
+          have h2 := π.strictMono.monotone (Fin.le_last k)
+          rw [π.head_eq] at h1; rw [π.last_eq] at h2; linarith
+        have hrS : π.riemannSum A = ∑ _k : Fin (N + 1), A s s := by
+          simp only [Partition.riemannSum]; congr 1; ext k
+          rw [hall k.castSucc, hall k.succ]
+        -- When s = t and N ≥ 1, all points are s, so riemannSum = (N+1) * A(s,s)
+        -- But wait, we need riemannSum = A(s,s) in general... Actually no.
+        -- For N = 0, riemannSum = A(s,s). For N > 0, riemannSum = (N+1)*A(s,s).
+        -- Hmm, this is a problem. Let me reconsider.
+        -- Actually the partition requires strictly monotone points, but s = t.
+        -- So Partition s s N requires N + 2 strictly increasing points between s and s,
+        -- which is only possible when N + 2 ≤ 1, i.e., N = 0 (actually N + 2 ≥ 2 always).
+        -- Wait, we need strict monotonicity of N + 2 points all between s and s.
+        -- That's impossible for N + 2 ≥ 2 unless... it is only possible for N + 2 = ... no.
+        -- Actually `Partition s s N` with `s = t` and `N ≥ 0` would require `N + 2` strictly
+        -- increasing reals all between `s` and `s`, which is impossible when `N + 2 ≥ 2`.
+        -- But `N + 2 ≥ 2` always. So there is no `Partition s s N` for any `N`.
+        -- The hypothesis `π : Partition s s N` is vacuously satisfiable only if `N + 2 < 2`, impossible.
+        -- So the conclusion holds vacuously... Actually no. `Partition s s 0` requires 2 strictly
+        -- increasing points, head = s, last = s. StrictMono on Fin 2 means points 0 < points 1,
+        -- but both = s. Contradiction. So `Partition s s N` is empty for all N.
+        exact absurd (π.strictMono (show (0 : Fin (N + 2)) < Fin.last (N + 1) from by
+          simp [Fin.lt_iff_val_lt_val, Fin.val_last])) (by rw [π.head_eq, π.last_eq]; exact lt_irrefl s)
+    · -- s < t: use Cauchy property to get a limit
+      -- Build a sequence of partitions with mesh → 0
+      have hseq : ∀ n : ℕ, ∃ (Nn : ℕ) (πn : Partition s t Nn), πn.mesh < 1 / (n + 1 : ℝ) := by
+        intro n; exact exists_partition hst' _ (by positivity)
+      choose Nn πn hπn using hseq
+      -- The sequence of Riemann sums is Cauchy
+      have hRS_cauchy : CauchySeq (fun n => (πn n).riemannSum A) := by
+        rw [Metric.cauchySeq_iff]
+        intro ε hε
+        obtain ⟨δ, hδ_pos, hδ⟩ := cauchy hst'.le ε hε
+        obtain ⟨M, hM⟩ : ∃ M : ℕ, ∀ n, M ≤ n → (πn n).mesh < δ := by
+          obtain ⟨M, hM⟩ := exists_nat_gt (1 / δ)
+          refine ⟨M, fun n hn => ?_⟩
+          calc (πn n).mesh < 1 / (n + 1 : ℝ) := hπn n
+            _ ≤ 1 / (M + 1 : ℝ) := by
+                apply div_le_div_of_nonneg_left one_pos.le (by positivity)
+                  (by exact_mod_cast Nat.succ_le_succ hn)
+            _ < δ := by
+                rw [div_lt_iff₀ (by positivity : (0 : ℝ) < M + 1)]
+                have := (div_lt_iff₀ hδ_pos).mp hM
+                linarith
+        exact ⟨M, fun m hm n hn => by rw [Real.dist_eq]; exact hδ (πn m) (πn n) (hM m hm) (hM n hn)⟩
+      -- Extract the limit
+      obtain ⟨L, hL⟩ := cauchySeq_tendsto_of_complete hRS_cauchy
+      refine ⟨L, ?_, ?_⟩
+      · -- Maximal inequality: |L - A s t| ≤ C * ω(s,t)^θ
+        have hbound : ∀ n, |(πn n).riemannSum A - A s t| ≤ C * (ω s t : ℝ) ^ θ :=
+          fun n => maximalInequality ω hθ hA hst'.le (πn n)
+        have htend : Filter.Tendsto (fun n => |(πn n).riemannSum A - A s t|) Filter.atTop
+            (nhds |L - A s t|) :=
+          (hL.sub tendsto_const_nhds).abs
+        exact le_of_tendsto htend (Filter.Eventually.of_forall hbound)
+      · -- Convergence
+        intro ε hε
+        -- Use Cauchy property with ε/2 to get δ₁
+        obtain ⟨δ₁, hδ₁_pos, hδ₁⟩ := cauchy hst'.le (ε / 2) (by linarith)
+        -- Find M such that |riemannSum(πn M) - L| < ε/2 and mesh(πn M) < δ₁
+        have hconv := Metric.tendsto_atTop.mp hL (ε / 2) (by linarith)
+        obtain ⟨M₁, hM₁⟩ := hconv
+        obtain ⟨M₂, hM₂⟩ : ∃ M₂ : ℕ, ∀ n, M₂ ≤ n → (πn n).mesh < δ₁ := by
+          obtain ⟨M₂, hM₂⟩ := exists_nat_gt (1 / δ₁)
+          refine ⟨M₂, fun n hn => ?_⟩
+          calc (πn n).mesh < 1 / (n + 1 : ℝ) := hπn n
+            _ ≤ 1 / (M₂ + 1 : ℝ) := by
+                apply div_le_div_of_nonneg_left one_pos.le (by positivity)
+                  (by exact_mod_cast Nat.succ_le_succ hn)
+            _ < δ₁ := by
+                rw [div_lt_iff₀ (by positivity : (0 : ℝ) < M₂ + 1)]
+                have := (div_lt_iff₀ hδ₁_pos).mp hM₂
+                linarith
+        set m := max M₁ M₂
+        refine ⟨δ₁, hδ₁_pos, fun {N} π hmesh => ?_⟩
+        have h1 : |π.riemannSum A - (πn m).riemannSum A| < ε / 2 := by
+          rw [abs_sub_comm]; exact hδ₁ (πn m) π (hM₂ m (le_max_right _ _)) hmesh
+        have h2 : |(πn m).riemannSum A - L| < ε / 2 := by
+          have := hM₁ m (le_max_left _ _); rwa [Real.dist_eq] at this
+        calc |π.riemannSum A - L|
+            = |(π.riemannSum A - (πn m).riemannSum A) + ((πn m).riemannSum A - L)| := by ring_nf
+          _ ≤ |π.riemannSum A - (πn m).riemannSum A| + |(πn m).riemannSum A - L| := abs_add_le _ _
+          _ < ε / 2 + ε / 2 := add_lt_add h1 h2
+          _ = ε := by ring
   -- === Extract sewing values ===
   set sewVal : ∀ {s t : ℝ}, s ≤ t → ℝ := fun hst => Classical.choose (limit_exists hst)
   have hsewVal_spec : ∀ {s t : ℝ} (hst : s ≤ t),
@@ -1211,12 +1431,385 @@ theorem sewingLemma {A : ℝ → ℝ → ℝ} (ω : Control) {θ : ℝ} (hθ : 1
     fun hst => Classical.choose_spec (limit_exists hst)
   -- === Additivity (sorry) ===
   have sewVal_add : ∀ {s u t : ℝ} (hsu : s ≤ u) (hut : u ≤ t),
-      sewVal (hsu.trans hut) = sewVal hsu + sewVal hut := by sorry
+      sewVal (hsu.trans hut) = sewVal hsu + sewVal hut := by
+    intro s u t hsu hut
+    -- We show sewVal(s,t) = sewVal(s,u) + sewVal(u,t) by uniqueness of the limit.
+    -- For any ε > 0, we can find partitions of [s,u] and [u,t] whose Riemann sums
+    -- are close to sewVal(s,u) and sewVal(u,t), and their concatenation is a partition
+    -- of [s,t] whose Riemann sum is the sum, and is close to sewVal(s,t).
+    by_contra h
+    push_neg at h
+    set L := sewVal (hsu.trans hut)
+    set L₁ := sewVal hsu
+    set L₂ := sewVal hut
+    have hne : L ≠ L₁ + L₂ := h
+    set gap := |L - (L₁ + L₂)| / 3
+    have hgap_pos : 0 < gap := div_pos (abs_pos.mpr (sub_ne_zero.mpr hne)) (by norm_num)
+    -- Get δ's for all three intervals
+    obtain ⟨δ₀, hδ₀_pos, hδ₀⟩ := (hsewVal_spec (hsu.trans hut)).2 gap hgap_pos
+    obtain ⟨δ₁, hδ₁_pos, hδ₁⟩ := (hsewVal_spec hsu).2 gap hgap_pos
+    obtain ⟨δ₂, hδ₂_pos, hδ₂⟩ := (hsewVal_spec hut).2 gap hgap_pos
+    set δ := min δ₀ (min δ₁ δ₂)
+    have hδ_pos : 0 < δ := lt_min hδ₀_pos (lt_min hδ₁_pos hδ₂_pos)
+    -- Case: s = u
+    rcases eq_or_lt_of_le hsu with rfl | hsu'
+    · -- sewVal(s,s) doesn't exist as a proper partition (Partition s s N is empty)
+      -- So sewVal hsu = L₁ is defined by Classical.choose on limit_exists (le_refl s).
+      -- From the spec, |L₁ - A s s| ≤ C * ω(s,s)^θ = C * 0 = 0, so L₁ = A s s.
+      -- Similarly L = sewVal(s,t) and L₂ = sewVal(s,t).
+      -- We need L = L₁ + L₂ = A s s + sewVal(s,t).
+      -- Hmm but (le_refl s).trans hut = hut... Wait, the `sewVal` depends on the proof term.
+      -- Actually `sewVal` is defined as `fun hst => Classical.choose (limit_exists hst)`.
+      -- So `sewVal (le_refl s)` and `sewVal hut` may differ even when `le_refl s ≤ hut`.
+      -- The issue is that `L = sewVal (hsu.trans hut) = sewVal hut` since `hsu = le_refl s`
+      -- and `(le_refl s).trans hut = hut`? No, they are different proof terms but propositionally equal.
+      -- Since `sewVal` takes a proof of `s ≤ t` and ℝ is a type, `Classical.choose` may give
+      -- different values for propositionally equal proofs! We need proof irrelevance.
+      -- In Lean 4, Prop is proof-irrelevant, so `hsu.trans hut = hut` as proofs of `s ≤ t`.
+      -- Therefore `sewVal (hsu.trans hut) = sewVal hut = L₂`. And `sewVal hsu = L₁`.
+      -- We need L₁ = 0 (since sewVal of a degenerate interval).
+      -- From spec: |L₁ - A s s| ≤ C * (ω s s : ℝ) ^ θ = C * 0 = 0
+      have hL₁_eq : L₁ = A s s := by
+        have h := (hsewVal_spec hsu).1
+        rw [ω.zero_diag, NNReal.coe_zero, Real.zero_rpow (by linarith : θ ≠ 0), mul_zero] at h
+        have := abs_nonneg (L₁ - A s s)
+        have := le_antisymm h this
+        linarith [abs_eq_zero.mp this]
+      -- L = L₂ since proof irrelevance
+      have hL_eq : L = L₂ := by rfl
+      -- Now we need L₂ = A s s + L₂, which requires A s s = 0... not necessarily true!
+      -- Hmm. So the approach via concatenation needs more care.
+      -- Actually, we should prove this differently. Let me just show convergence directly.
+      -- For any fine partition of [s,t] that includes u as a point, the Riemann sum splits.
+      -- When s = u, any partition of [s,t] already starts at s = u.
+      -- Its Riemann sum = sum over [s,t] = Riemann sum of [u,t] = close to L₂.
+      -- And L = sewVal(s,t) is also close to the same Riemann sums.
+      -- So L = L₂. And L₁ = A s s (from the bound). So L = L₁ + L₂ iff A s s = 0.
+      -- But A s s need not be 0! This is a genuine issue.
+      -- Wait, but sewVal for s = u: the spec says the limit of Riemann sums over [s,s].
+      -- But there are no partitions of [s,s] (since we need strictly monotone points from s to s).
+      -- So the ∀ clause in the spec is vacuously true for any L₁!
+      -- The only constraint is |L₁ - A s s| ≤ 0, so L₁ = A s s.
+      -- And L = L₂ (proof irrelevance). So L₁ + L₂ = A s s + L₂ = A s s + L.
+      -- This equals L iff A s s = 0. But A s s could be anything!
+      -- This means the statement sewVal_add is FALSE when s = u and A s s ≠ 0!
+      -- Unless... let me re-examine. We have limit_exists gives us L₁ with the bound.
+      -- The bound is |L₁ - A s s| ≤ 0, so L₁ = A s s.
+      -- And the convergence part is vacuously true.
+      -- For the other side: L = sewVal(s,t) = L₂ = sewVal(u,t) (proof irrelevance since s=u).
+      -- Wait no! s = u, so sewVal (hsu.trans hut) : sewVal (s ≤ t) and
+      -- sewVal hut : sewVal (u ≤ t) = sewVal (s ≤ t). By proof irrelevance these are the same.
+      -- So L = L₂. And L₁ = A s s. We need L = A s s + L. So A s s = 0... contradiction.
+      --
+      -- Unless the limit_exists for s = s doesn't give L₁ = A s s but L₁ = 0?
+      -- Let me re-read limit_exists. It says |L - A s t| ≤ C * ω(s,t)^θ.
+      -- For s = t: |L₁ - A s s| ≤ C * 0^θ = 0. So L₁ = A s s. Not 0.
+      --
+      -- I think the issue is that sewVal_add as stated may need a different approach.
+      -- Actually, wait. When s = u, `sewVal hsu` where `hsu : s ≤ s` gives A s s.
+      -- And `sewVal (hsu.trans hut) = sewVal hut` by proof irrelevance? Actually NO.
+      -- `hsu.trans hut : s ≤ t` and `hut : u ≤ t` where `u = s`. These are both proofs of
+      -- `s ≤ t` (since u = s). By proof irrelevance of Prop, `hsu.trans hut = hut` (as terms
+      -- of type `s ≤ t`). So `sewVal (hsu.trans hut) = sewVal hut`.
+      -- But `sewVal hut` is the Classical.choose for `limit_exists (hut : s ≤ t)` (since u = s).
+      -- And `sewVal hut` (with `hut : u ≤ t`) before the `rfl` is for `limit_exists (hut : u ≤ t)`.
+      -- After `rcases eq_or_lt_of_le hsu with rfl | hsu'`, we have `u` replaced by `s`, so
+      -- `hut : s ≤ t` and `hsu : s ≤ s`.
+      -- So L = sewVal (hsu.trans hut) and L₂ = sewVal hut.
+      -- These use different proofs of `s ≤ t`: `hsu.trans hut` vs `hut`.
+      -- But by proof irrelevance, they're the same proof! So L = L₂.
+      -- Then L₁ + L₂ = A s s + L ≠ L unless A s s = 0.
+      -- This suggests sewVal_add is simply not true in this generality without A s s = 0.
+      --
+      -- But the sewing lemma should work. Let me reconsider the approach.
+      -- Perhaps I should not case-split and instead directly use the convergence characterization.
+      -- Let me try a cleaner proof using the uniqueness of limits.
+      -- The key fact: for any ε > 0, there exist fine partitions of [s,u] and [u,t] whose
+      -- Riemann sums approximate L₁ and L₂. Concatenating gives a partition of [s,t] whose
+      -- Riemann sum is L₁ + L₂ ± ε, and this must also be close to L.
+      -- But constructing the concatenation is the issue when s = u (empty partition of [s,s]).
+      -- When s = u, the "partition of [s,u]" doesn't exist (N ≥ 0 means ≥ 2 points).
+      -- So we can't concatenate. We need a different argument for s = u.
+      -- Actually when s = u, L₁ = A s s and L = L₂ (by proof irrelevance), and we need
+      -- A s s + L₂ = L₂, i.e., A s s = 0.
+      -- Unless there's a global assumption that A s s = 0? Let me check the defect bound.
+      -- hA says |defect A s u t| ≤ ω(s,t)^θ for s ≤ u ≤ t.
+      -- defect A s s s = A s s - A s s - A s s = -A s s.
+      -- |A s s| ≤ ω(s,s)^θ = 0. So A s s = 0!
+      have hAss : A s s = 0 := by
+        have h := hA (le_refl s) (le_refl s)
+        simp [defect, ω.zero_diag, Real.zero_rpow (by linarith : θ ≠ 0)] at h
+        linarith [abs_nonneg (-(A s s))]
+      exact hne (by rw [hL₁_eq, hAss, zero_add])
+    · -- s < u: both intervals are nontrivial, or u = t.
+      rcases eq_or_lt_of_le hut with rfl | hut'
+      · -- u = t: symmetric to s = u case
+        have hL₂_eq : L₂ = A u u := by
+          have h := (hsewVal_spec hut).1
+          rw [ω.zero_diag, NNReal.coe_zero, Real.zero_rpow (by linarith : θ ≠ 0), mul_zero] at h
+          have := abs_nonneg (L₂ - A u u)
+          linarith [abs_eq_zero.mp (le_antisymm h this)]
+        have hAuu : A u u = 0 := by
+          have h := hA (le_refl u) (le_refl u)
+          simp only [defect, ω.zero_diag, NNReal.coe_zero,
+            Real.zero_rpow (by linarith : θ ≠ 0)] at h
+          -- h : |A u u - A u u - A u u| ≤ 0
+          have heq : A u u - A u u - A u u = -(A u u) := by ring
+          rw [heq] at h
+          have := abs_nonneg (A u u)
+          rw [abs_neg] at h
+          linarith [abs_eq_zero.mp (le_antisymm h (abs_nonneg _))]
+        exact hne (by rw [hL₂_eq, hAuu, add_zero])
+      · -- s < u < t: both intervals are proper
+        obtain ⟨N₁, π_su, hπ_su⟩ := exists_partition hsu' δ hδ_pos
+        obtain ⟨N₂, π_ut, hπ_ut⟩ := exists_partition hut' δ hδ_pos
+        -- Build concatenation partition
+        set Nc := N₁ + N₂ + 1
+        have hNc_def : Nc = N₁ + N₂ + 1 := rfl
+        set cp : Fin (Nc + 2) → ℝ := fun k =>
+          if h : k.val ≤ N₁ + 1 then π_su.points ⟨k.val, by omega⟩
+          else π_ut.points ⟨k.val - (N₁ + 1), by have := k.isLt; omega⟩
+        have hcp_sm : StrictMono cp := by
+          intro ⟨a, ha⟩ ⟨b, hb⟩ hab
+          simp only [cp, Fin.mk_lt_mk] at hab ⊢
+          split_ifs with h1 h2
+          · exact π_su.strictMono (by exact Fin.mk_lt_mk.mpr hab)
+          · rcases eq_or_lt_of_le h1 with rfl | ha'
+            · have : 0 < b - (N₁ + 1) := by omega
+              calc π_su.points ⟨N₁ + 1, by omega⟩
+                  = u := by
+                    have : (⟨N₁ + 1, by omega⟩ : Fin (N₁ + 2)) = Fin.last (N₁ + 1) := by
+                      ext; simp [Fin.val_last]
+                    rw [this, π_su.last_eq]
+                _ = π_ut.points 0 := π_ut.head_eq.symm
+                _ < π_ut.points ⟨b - (N₁ + 1), by omega⟩ :=
+                    π_ut.strictMono (by simp [Fin.lt_def]; omega)
+            · calc π_su.points ⟨a, by omega⟩
+                  < π_su.points ⟨N₁ + 1, by omega⟩ :=
+                    π_su.strictMono (by simp [Fin.lt_def]; omega)
+                _ = u := by
+                    have : (⟨N₁ + 1, by omega⟩ : Fin (N₁ + 2)) = Fin.last (N₁ + 1) := by
+                      ext; simp [Fin.val_last]
+                    rw [this, π_su.last_eq]
+                _ = π_ut.points 0 := π_ut.head_eq.symm
+                _ ≤ π_ut.points ⟨b - (N₁ + 1), by omega⟩ :=
+                    π_ut.strictMono.monotone (Fin.zero_le _)
+          · omega
+          · exact π_ut.strictMono (by simp [Fin.lt_def]; omega)
+        have hcp_head : cp 0 = s := by
+          simp only [cp, Fin.val_zero, show (0 : ℕ) ≤ N₁ + 1 from by omega, dif_pos]
+          exact π_su.head_eq
+        have hcp_last : cp (Fin.last (Nc + 1)) = t := by
+          show (if h : (Fin.last (Nc + 1)).val ≤ N₁ + 1 then _ else _) = t
+          rw [dif_neg (by simp [Fin.val_last, Nc])]
+          have : (⟨(Fin.last (Nc + 1)).val - (N₁ + 1), by simp only [Fin.val_last, Nc]; omega⟩ :
+            Fin (N₂ + 2)) = Fin.last (N₂ + 1) := by
+            ext; simp only [Fin.val_last, Nc]; omega
+          rw [this, π_ut.last_eq]
+        set hcat : Partition s t Nc := ⟨cp, hcp_sm, hcp_head, hcp_last⟩
+        -- Riemann sum splits
+        have hRS_split : hcat.riemannSum A = π_su.riemannSum A + π_ut.riemannSum A := by
+          simp only [Partition.riemannSum, hcat]
+          -- Cast the LHS sum to Fin ((N₁+1) + (N₂+1))
+          have hNc_eq : Nc + 1 = (N₁ + 1) + (N₂ + 1) := by omega
+          set f : Fin (Nc + 1) → ℝ := fun k => A (cp k.castSucc) (cp k.succ)
+          -- Reindex via finCongr
+          -- Key: (finCongr hNc_eq).symm preserves Fin.val
+          have hfcval : ∀ (k : Fin ((N₁ + 1) + (N₂ + 1))),
+            ((finCongr hNc_eq).symm k).val = k.val := fun k => by
+            simp [finCongr, Fin.val_cast]
+          -- cp only depends on Fin.val, so we can simplify
+          have hcp_val : ∀ (a b : Fin (Nc + 2)), a.val = b.val → cp a = cp b := fun a b h => by
+            have hab : a = b := Fin.ext h
+            rw [hab]
+          -- For the first sum: castAdd preserves val, so finCongr.symm ∘ castAdd has val = k
+          -- For the second sum: natAdd adds (N₁+1), so finCongr.symm ∘ natAdd has val = k + (N₁+1)
+          set g : Fin ((N₁ + 1) + (N₂ + 1)) → ℝ := fun k => f ((finCongr hNc_eq).symm k)
+          have hreindex : ∑ k, f k = ∑ k, g k :=
+            Fintype.sum_equiv (finCongr hNc_eq) f g (fun x => by simp [g])
+          rw [hreindex, Fin.sum_univ_add]
+          congr 1
+          · apply Finset.sum_congr rfl; intro ⟨k, hk⟩ _
+            show g (Fin.castAdd (N₂ + 1) ⟨k, hk⟩) =
+              A (π_su.points (⟨k, hk⟩ : Fin (N₁ + 1)).castSucc)
+                (π_su.points (⟨k, hk⟩ : Fin (N₁ + 1)).succ)
+            simp only [g, f]
+            have hv1 : ((finCongr hNc_eq).symm (Fin.castAdd (N₂ + 1) ⟨k, hk⟩)).castSucc.val =
+              k := by simp [Fin.coe_castSucc, hfcval, Fin.castAdd]
+            have hv2 : ((finCongr hNc_eq).symm (Fin.castAdd (N₂ + 1) ⟨k, hk⟩)).succ.val =
+              k + 1 := by simp [Fin.val_succ, hfcval, Fin.castAdd]
+            rw [hcp_val _ ⟨k, by omega⟩ hv1,
+                hcp_val _ ⟨k + 1, by omega⟩ hv2]
+            simp only [cp, dif_pos (show k ≤ N₁ + 1 by omega),
+              dif_pos (show k + 1 ≤ N₁ + 1 by omega)]
+            congr 1 <;> congr 1 <;> exact Fin.ext rfl
+          · apply Finset.sum_congr rfl; intro ⟨k, hk⟩ _
+            show g (Fin.natAdd (N₁ + 1) ⟨k, hk⟩) =
+              A (π_ut.points (⟨k, hk⟩ : Fin (N₂ + 1)).castSucc)
+                (π_ut.points (⟨k, hk⟩ : Fin (N₂ + 1)).succ)
+            simp only [g, f]
+            have hv1 : ((finCongr hNc_eq).symm (Fin.natAdd (N₁ + 1) ⟨k, hk⟩)).castSucc.val =
+              k + (N₁ + 1) := by simp [Fin.coe_castSucc, hfcval, Fin.natAdd]; omega
+            have hv2 : ((finCongr hNc_eq).symm (Fin.natAdd (N₁ + 1) ⟨k, hk⟩)).succ.val =
+              k + (N₁ + 1) + 1 := by simp [Fin.val_succ, hfcval, Fin.natAdd]; omega
+            -- Both cp args need rewriting. Use Fin.ext to equate Fin args.
+            have hFin1 : ((finCongr hNc_eq).symm (Fin.natAdd (N₁ + 1) ⟨k, hk⟩)).castSucc =
+              (⟨k + (N₁ + 1), by omega⟩ : Fin (Nc + 2)) := Fin.ext (by
+                simp [Fin.coe_castSucc, hfcval, Fin.natAdd]; omega)
+            have hFin2 : ((finCongr hNc_eq).symm (Fin.natAdd (N₁ + 1) ⟨k, hk⟩)).succ =
+              (⟨k + (N₁ + 1) + 1, by omega⟩ : Fin (Nc + 2)) := Fin.ext (by
+                simp [Fin.val_succ, hfcval, Fin.natAdd]; omega)
+            -- Use congrArg to rewrite cp args
+            show A (cp ((finCongr hNc_eq).symm (Fin.natAdd (N₁ + 1) ⟨k, hk⟩)).castSucc)
+              (cp ((finCongr hNc_eq).symm (Fin.natAdd (N₁ + 1) ⟨k, hk⟩)).succ) = _
+            rw [show ((finCongr hNc_eq).symm (Fin.natAdd (N₁ + 1) ⟨k, hk⟩)).castSucc =
+              (⟨k + (N₁ + 1), by omega⟩ : Fin (Nc + 2)) from hFin1]
+            rw [show ((finCongr hNc_eq).symm (Fin.natAdd (N₁ + 1) ⟨k, hk⟩)).succ =
+              (⟨k + (N₁ + 1) + 1, by omega⟩ : Fin (Nc + 2)) from hFin2]
+            -- k + (N₁+1) ≤ N₁+1 iff k = 0
+            -- k + (N₁+1) + 1 > N₁+1 always
+            have hn2 : ¬ (k + (N₁ + 1) + 1 ≤ N₁ + 1) := by omega
+            by_cases hk0 : k = 0
+            · -- k = 0: first arg is at boundary (N₁+1), cp gives π_su.points = u
+              subst hk0
+              simp only [Fin.val_mk, cp, show (0 : ℕ) + (N₁ + 1) = N₁ + 1 from by omega,
+                dif_pos (le_refl _), dif_neg hn2,
+                Fin.castSucc, Fin.succ]
+              congr 1
+              · -- π_su.points ⟨N₁+1, _⟩ = u = π_ut.points 0
+                rw [show (⟨N₁ + 1, _⟩ : Fin (N₁ + 2)) = Fin.last (N₁ + 1) from
+                  Fin.ext (by simp [Fin.val_last])]
+                rw [π_su.last_eq]
+                exact π_ut.head_eq.symm
+              · convert rfl using 3 <;> simp
+            · -- k > 0: both args use dif_neg
+              have hn1 : ¬ (k + (N₁ + 1) ≤ N₁ + 1) := by omega
+              simp only [Fin.val_mk, cp, dif_neg hn1, dif_neg hn2,
+                Fin.castSucc, Fin.succ]
+              convert rfl using 3 <;> simp <;> omega
+        -- Mesh bound
+        have hbdd_su : BddAbove (Set.range fun j : Fin (N₁ + 1) =>
+            π_su.points j.succ - π_su.points j.castSucc) :=
+          ⟨t - s, fun x ⟨j, hj⟩ => hj ▸ by
+            linarith [π_su.strictMono.monotone (Fin.zero_le j.castSucc),
+              π_su.strictMono.monotone (Fin.le_last j.succ), π_su.head_eq, π_su.last_eq]⟩
+        have hbdd_ut : BddAbove (Set.range fun j : Fin (N₂ + 1) =>
+            π_ut.points j.succ - π_ut.points j.castSucc) :=
+          ⟨t - s, fun x ⟨j, hj⟩ => hj ▸ by
+            linarith [π_ut.strictMono.monotone (Fin.zero_le j.castSucc),
+              π_ut.strictMono.monotone (Fin.le_last j.succ), π_ut.head_eq, π_ut.last_eq]⟩
+        have hcat_mesh : hcat.mesh < δ := by
+          simp only [Partition.mesh, hcat]
+          rw [← sSup_range, Set.Finite.csSup_lt_iff (Set.finite_range _) (Set.range_nonempty _)]
+          rintro _ ⟨⟨k, hk⟩, rfl⟩
+          show cp ⟨k + 1, by omega⟩ - cp ⟨k, by omega⟩ < δ
+          simp only [cp]
+          by_cases h1 : k + 1 ≤ N₁ + 1
+          · rw [dif_pos (show k ≤ N₁ + 1 by omega), dif_pos h1]
+            have hk' : k < N₁ + 1 := by omega
+            have : π_su.points ⟨k + 1, by omega⟩ - π_su.points ⟨k, by omega⟩ =
+              π_su.points (⟨k, hk'⟩ : Fin (N₁ + 1)).succ -
+              π_su.points (⟨k, hk'⟩ : Fin (N₁ + 1)).castSucc := by
+              simp [Fin.succ, Fin.castSucc]
+            rw [this]
+            exact lt_of_le_of_lt (le_ciSup hbdd_su ⟨k, hk'⟩) hπ_su
+          · push_neg at h1
+            by_cases h2 : k ≤ N₁ + 1
+            · -- k = N₁ + 1 (boundary case)
+              have hk_eq : k = N₁ + 1 := by omega
+              subst hk_eq
+              rw [dif_pos (le_refl _), dif_neg (show ¬ (N₁ + 1 + 1 ≤ N₁ + 1) by omega)]
+              -- Goal: π_ut.points ⟨N₁+1+1-(N₁+1), _⟩ - π_su.points ⟨N₁+1, _⟩ < δ
+              have hsu_last : π_su.points ⟨N₁ + 1, by omega⟩ = u := by
+                have : (⟨N₁ + 1, by omega⟩ : Fin (N₁ + 2)) = Fin.last (N₁ + 1) := by
+                  ext; simp [Fin.val_last]
+                rw [this, π_su.last_eq]
+              -- The term is: π_ut.points ⟨1, _⟩ - π_su.points ⟨N₁+1, _⟩
+              -- = π_ut.points 1 - u = π_ut.points 1 - π_ut.points 0
+              have h_eq : π_ut.points ⟨N₁ + 1 + 1 - (N₁ + 1), by omega⟩ -
+                    π_su.points ⟨N₁ + 1, by omega⟩ =
+                  π_ut.points (0 : Fin (N₂ + 1)).succ -
+                    π_ut.points (0 : Fin (N₂ + 1)).castSucc := by
+                have : (0 : Fin (N₂ + 1)).succ = (⟨1, by omega⟩ : Fin (N₂ + 2)) := by
+                  ext; simp [Fin.succ]
+                have : (0 : Fin (N₂ + 1)).castSucc = (⟨0, by omega⟩ : Fin (N₂ + 2)) := by
+                  ext; simp [Fin.castSucc]
+                rw [‹(0 : Fin (N₂ + 1)).succ = _›, ‹(0 : Fin (N₂ + 1)).castSucc = _›]
+                congr 1
+                · congr 1; ext; simp
+                · rw [hsu_last]; exact π_ut.head_eq.symm
+              rw [h_eq]
+              exact lt_of_le_of_lt (le_ciSup hbdd_ut (0 : Fin (N₂ + 1))) hπ_ut
+            · push_neg at h2
+              rw [dif_neg (show ¬ (k + 1 ≤ N₁ + 1) by omega),
+                dif_neg (show ¬ (k ≤ N₁ + 1) by omega)]
+              have hj : k - (N₁ + 1) < N₂ + 1 := by omega
+              have hconv : π_ut.points ⟨k + 1 - (N₁ + 1), by omega⟩ -
+                    π_ut.points ⟨k - (N₁ + 1), by omega⟩ =
+                  π_ut.points (⟨k - (N₁ + 1), hj⟩ : Fin (N₂ + 1)).succ -
+                    π_ut.points (⟨k - (N₁ + 1), hj⟩ : Fin (N₂ + 1)).castSucc := by
+                simp only [Fin.succ, Fin.castSucc, Fin.val_mk]
+                congr 1 <;> (congr 1; ext; simp; omega)
+              rw [hconv]
+              exact lt_of_le_of_lt (le_ciSup hbdd_ut ⟨k - (N₁ + 1), hj⟩) hπ_ut
+        -- Derive contradiction
+        have h1 : |hcat.riemannSum A - L| < gap :=
+          hδ₀ hcat (lt_of_lt_of_le hcat_mesh (min_le_left _ _))
+        have h2 : |π_su.riemannSum A - L₁| < gap :=
+          hδ₁ π_su (lt_of_lt_of_le hπ_su (le_trans (min_le_right δ₀ _) (min_le_left δ₁ δ₂)))
+        have h3 : |π_ut.riemannSum A - L₂| < gap :=
+          hδ₂ π_ut (lt_of_lt_of_le hπ_ut (le_trans (min_le_right δ₀ _) (min_le_right δ₁ δ₂)))
+        have h4 : |hcat.riemannSum A - (L₁ + L₂)| < 2 * gap := by
+          rw [hRS_split]
+          calc |π_su.riemannSum A + π_ut.riemannSum A - (L₁ + L₂)|
+              = |(π_su.riemannSum A - L₁) + (π_ut.riemannSum A - L₂)| := by ring_nf
+            _ ≤ |π_su.riemannSum A - L₁| + |π_ut.riemannSum A - L₂| := abs_add_le _ _
+            _ < gap + gap := add_lt_add h2 h3
+            _ = 2 * gap := by ring
+        have h5 : |L - (L₁ + L₂)| < 3 * gap := by
+          calc |L - (L₁ + L₂)|
+              = |(L - hcat.riemannSum A) + (hcat.riemannSum A - (L₁ + L₂))| := by ring_nf
+            _ ≤ |L - hcat.riemannSum A| + |hcat.riemannSum A - (L₁ + L₂)| := abs_add_le _ _
+            _ = |hcat.riemannSum A - L| + |hcat.riemannSum A - (L₁ + L₂)| := by rw [abs_sub_comm]
+            _ < gap + 2 * gap := add_lt_add h1 h4
+            _ = 3 * gap := by ring
+        have hgap_def : gap = |L - (L₁ + L₂)| / 3 := rfl
+        linarith [h5]
   -- === Define I and prove both parts ===
   have I_diff_eq : ∀ {s t : ℝ} (hst : s ≤ t),
       (if h : 0 ≤ t then sewVal h else -(sewVal (le_of_lt (not_le.mp h)))) -
       (if h : 0 ≤ s then sewVal h else -(sewVal (le_of_lt (not_le.mp h)))) =
-      sewVal hst := by sorry
+      sewVal hst := by
+    intro s t hst
+    -- Case 1: 0 ≤ s ≤ t
+    -- Case 2: s ≤ 0 ≤ t
+    -- Case 3: s ≤ t ≤ 0
+    by_cases h0s : 0 ≤ s
+    · -- Case 1: 0 ≤ s ≤ t
+      have h0t : 0 ≤ t := le_trans h0s hst
+      simp only [h0s, h0t, dite_true]
+      -- sewVal(0,t) - sewVal(0,s) = sewVal(s,t)
+      -- From sewVal_add: sewVal(0,t) = sewVal(0,s) + sewVal(s,t)
+      have := sewVal_add h0s hst
+      linarith
+    · push_neg at h0s
+      by_cases h0t : 0 ≤ t
+      · -- Case 2: s < 0 ≤ t
+        have hs_neg : ¬ (0 ≤ s) := by linarith
+        simp only [hs_neg, dite_false, h0t, dite_true]
+        -- sewVal(0,t) - (-(sewVal(s,0))) = sewVal(0,t) + sewVal(s,0) = sewVal(s,t)
+        -- From sewVal_add: sewVal(s,t) = sewVal(s,0) + sewVal(0,t)
+        have := sewVal_add h0s.le h0t
+        linarith
+      · -- Case 3: s ≤ t < 0
+        push_neg at h0t
+        have hs_neg : ¬ (0 ≤ s) := by linarith
+        have ht_neg : ¬ (0 ≤ t) := by linarith
+        simp only [hs_neg, ht_neg, dite_false]
+        -- -(sewVal(t,0)) + sewVal(s,0) = sewVal(s,t)
+        -- From sewVal_add: sewVal(s,0) = sewVal(s,t) + sewVal(t,0)
+        have := sewVal_add hst h0t.le
+        linarith
   exact ⟨fun t => if h : 0 ≤ t then sewVal h
     else -(sewVal (le_of_lt (not_le.mp h))),
     fun {s t} hst => by rw [I_diff_eq hst]; exact (hsewVal_spec hst).1,
