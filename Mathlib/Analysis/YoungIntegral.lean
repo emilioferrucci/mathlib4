@@ -12,7 +12,7 @@ import Mathlib.Analysis.BoundedVariation
 open Filter
 open scoped Topology
 
-set_option linter.style.longFile 2500
+set_option linter.style.longFile 2800
 set_option linter.style.setOption false
 set_option linter.flexible false
 
@@ -2117,7 +2117,7 @@ lemma raw_young_control_max_tendsto_zero {a b p q : ℝ} (f g : ℝ → ℝ)
             ((π n).pts.get ⟨i.1 + 1, by omega⟩)) <;> simp_all
     linarith
   , by
-      show ((List.finRange ((π n).pts.length - 1)).map (fun i =>
+      change ((List.finRange ((π n).pts.length - 1)).map (fun i =>
         young_control f g p q
           ((π n).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
           ((π n).pts.get ⟨i.1 + 1, by omega⟩))).foldr max 0 - 0 < ε
@@ -2345,7 +2345,273 @@ lemma tendsto_rsSum_nhds_youngIntegral_of_vanishing_mesh {a b p q : ℝ} (f g : 
     hI
 
 
-/-- Integration by parts for the Young integral. -/
+/-- The cross term in the summation-by-parts formula for rsSum.go. -/
+def rsSum_cross (f g : ℝ → ℝ) : ℝ → List ℝ → ℝ
+  | _, [] => 0
+  | x, y :: rest => (f y - f x) * (g y - g x) + rsSum_cross f g y rest
+
+/-
+PROBLEM
+Discrete summation-by-parts identity for rsSum.go:
+  go(f,g) + go(g,f) + cross(f,g) = f(last)*g(last) - f(x)*g(x)
+
+PROVIDED SOLUTION
+Induction on the list l. Base case: l = [], both sides simplify to 0.
+Inductive step: l = y :: rest. Unfold rsSum.go, rsSum_cross, and List.getLastD at the head.
+The LHS becomes
+  f x * (g y - g x) + go f g y rest + g x * (f y - f x) + go g f y rest +
+    (f y - f x) * (g y - g x) + rsSum_cross f g y rest.
+Group the go and cross terms for the IH:
+  go f g y rest + go g f y rest + rsSum_cross f g y rest =
+    f (rest.getLastD y) * g (rest.getLastD y) - f y * g y.
+Then the remaining terms are
+  f x * (g y - g x) + g x * (f y - f x) + (f y - f x) * (g y - g x) =
+    f y * g y - f x * g x,
+which follows by ring. Combining gives the result. Note: for y :: rest,
+getLastD x = rest.getLastD y.
+-/
+set_option linter.style.longLine false in
+set_option linter.unusedSimpArgs false in
+set_option linter.style.multiGoal false in
+lemma rsSum_go_add_go_add_cross (f g : ℝ → ℝ) (x : ℝ) (l : List ℝ) :
+    Partition.rsSum.go f g x l + Partition.rsSum.go g f x l + rsSum_cross f g x l =
+      f (l.getLastD x) * g (l.getLastD x) - f x * g x := by
+  induction l generalizing x <;> simp_all +decide [ sub_mul ] ; ring;
+  · exact show 0 + 0 + 0 = 0 by norm_num;
+  · rename_i k hk₁ hk₂; simp_all +decide [ Partition.rsSum.go, rsSum_cross ] ; ring;
+    grind
+
+/-
+PROBLEM
+The rsSum of a partition satisfies the summation-by-parts identity.
+
+PROVIDED SOLUTION
+Unfold rsSum and the match. Case split on π.pts.
+If π.pts = [], then π.first gives head? = some a, contradiction since [].head? = none.
+If π.pts = x :: xs, then rsSum f g = go f g x xs and rsSum g f = go g f x xs and the match gives
+rsSum_cross f g x xs. By rsSum_go_add_go_add_cross,
+  go f g x xs + go g f x xs + rsSum_cross f g x xs =
+    f (xs.getLastD x) * g (xs.getLastD x) - f x * g x.
+From π.first (head? = some a), x = a. From π.last (getLast? = some b), for x :: xs we have
+getLast? = some (xs.getLastD x), so xs.getLastD x = b. Substituting gives
+f b * g b - f a * g a.
+-/
+set_option linter.style.longLine false in
+set_option linter.unusedSimpArgs false in
+lemma Partition.rsSum_add_rsSum_add_cross {a b : ℝ} (π : Partition a b) (f g : ℝ → ℝ) :
+    π.rsSum f g + π.rsSum g f + (match π.pts with | [] => 0 | x :: xs => rsSum_cross f g x xs) =
+      f b * g b - f a * g a := by
+  rcases π with ⟨ pts, hpts ⟩;
+  cases pts <;> simp_all +decide [ List.getLast? ];
+  · contradiction;
+  · convert rsSum_go_add_go_add_cross f g _ _ using 1;
+    grind
+
+/-- The cross term for a partition equals rsSum_cross over its points. -/
+def Partition.crossTerm {a b : ℝ} (π : Partition a b) (f g : ℝ → ℝ) : ℝ :=
+  match π.pts with | [] => 0 | x :: xs => rsSum_cross f g x xs
+
+/-- Finset-based version of the cross term. -/
+noncomputable def Partition.crossTermFin {a b : ℝ} (π : Partition a b) (f g : ℝ → ℝ) : ℝ :=
+  ((List.finRange (π.pts.length - 1)).map (fun i =>
+    (f (π.pts.get ⟨i.1 + 1, by omega⟩) -
+        f (π.pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)) *
+      (g (π.pts.get ⟨i.1 + 1, by omega⟩) -
+        g (π.pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)))).sum
+
+/-
+PROBLEM
+The list-based and finset-based cross terms are equal.
+
+PROVIDED SOLUTION
+Unfold crossTerm and crossTermFin. The crossTerm matches on π.pts as [] or x :: xs,
+giving rsSum_cross f g x xs. The crossTermFin uses List.finRange (π.pts.length - 1) to index.
+Prove by induction on the list xs, showing that rsSum_cross f g x xs equals the
+finRange-indexed sum. For the base case (xs = []), both are 0. For the cons case
+(xs = y :: rest), rsSum_cross gives
+  (f y - f x) * (g y - g x) + rsSum_cross f g y rest,
+and the finRange sum splits similarly.
+
+Actually, the cleanest approach: induction on π.pts.length - 1, or directly unfold both
+definitions and show they agree by matching on π.pts and doing induction on the tail.
+Use the fact that for x :: xs, get ⟨0, _⟩ = x and get ⟨i+1, _⟩ = xs.get ⟨i, _⟩.
+-/
+set_option linter.style.longLine false in
+set_option linter.unusedSimpArgs false in
+set_option linter.style.multiGoal false in
+set_option linter.style.refine false in
+lemma Partition.crossTerm_eq_crossTermFin {a b : ℝ} (π : Partition a b) (f g : ℝ → ℝ) :
+    π.crossTerm f g = π.crossTermFin f g := by
+  -- By definition of `rsSum_cross` and `crossTermFin`, we can show that they are equal by induction on the length of the partition's pts.
+  have h_eq : ∀ (l : List ℝ), ∀ (x : ℝ), rsSum_cross f g x l = ((List.finRange l.length).map (fun i =>
+    (f (l.get ⟨i.1, by omega⟩) - f (if i.1 = 0 then x else l.get ⟨i.1 - 1, by
+      exact lt_of_le_of_lt ( Nat.pred_le _ ) i.2⟩)) *
+    (g (l.get ⟨i.1, by omega⟩) - g (if i.1 = 0 then x else l.get ⟨i.1 - 1, by
+      exact lt_of_le_of_lt ( Nat.pred_le _ ) i.2⟩)))).sum := by
+      all_goals generalize_proofs at *;
+      intro l x; induction l generalizing x <;> simp +decide [ *, List.finRange_succ ] ;
+      · exact?;
+      · rename_i k hk₁ hk₂ hk₃; simp_all +decide [ List.finRange_succ ] ;
+        convert congr_arg ( fun y => ( f hk₁ - f x ) * ( g hk₁ - g x ) + y ) ( hk₃ hk₁ ) using 1 ; simp +decide [ List.finRange_succ ] ; ring!;
+        congr! 2;
+        grind
+  generalize_proofs at *;
+  rcases π with ⟨ _ | ⟨ x, _ | ⟨ y, l ⟩ ⟩, h₀, h₁ ⟩ <;> simp_all +decide [ List.finRange_succ ];
+  · cases h₁;
+  · unfold Partition.crossTerm Partition.crossTermFin; aesop;
+  · convert h_eq ( y :: l ) x using 1 ; simp +decide [ List.finRange ];
+    unfold Partition.crossTermFin; simp +decide [ List.finRange_succ ] ; ring;
+    congr! 1;
+    refine' List.ext_get _ _ <;> simp +decide [ Function.comp ]
+
+/-
+PROBLEM
+Bound |crossTermFin| in terms of sum of young_control^(1/p+1/q).
+
+PROVIDED SOLUTION
+Unfold crossTermFin. The absolute value of a sum is at most the sum of absolute values (Finset.abs_sum_le_sum_abs or similar). Then each |term| = |f(pts[i+1]) - f(pts[i])| * |g(pts[i+1]) - g(pts[i])| (by abs_mul). Each such product is ≤ young_control(pts[i], pts[i+1])^(1/p+1/q) by abs_sub_mul_abs_sub_le_young_control_rpow applied with u = pts[i], v = pts[i], w = pts[i+1]... wait, the existing lemma bounds |f v - f u| * |g w - g v| for u ≤ v ≤ w. For the 2-point case u = v = pts[i], w = pts[i+1], we get |f(pts[i]) - f(pts[i])| * |g(pts[i+1]) - g(pts[i])| = 0, which is useless.
+
+Instead, use abs_sub_le_pVariationPowOn_toReal_rpow twice to get:
+|f(pts[i+1]) - f(pts[i])| ≤ pVarPow_f(pts[i], pts[i+1])^(1/p)
+|g(pts[i+1]) - g(pts[i])| ≤ pVarPow_g(pts[i], pts[i+1])^(1/q)
+Multiply: product ≤ A^(1/p) * B^(1/q) where A = pVarPow_f, B = pVarPow_g.
+Then A^(1/p) ≤ (A+B)^(1/p) and B^(1/q) ≤ (A+B)^(1/q) since A ≤ A+B and B ≤ A+B and rpow is monotone.
+So product ≤ (A+B)^(1/p) * (A+B)^(1/q) = (A+B)^(1/p+1/q) = young_control^(1/p+1/q).
+
+For the p-variation finiteness: pVarPow on subintervals [pts[i], pts[i+1]] is ≤ the global pVarPow on [a,b] which is finite (by hfp and hgq), so it's also finite. For the membership requirements of abs_sub_le_pVariationPowOn_toReal_rpow: pts[i] and pts[i+1] are both in Set.Icc pts[i] pts[i+1] (trivially), and pts[i] ≤ pts[i+1] (from the sorted/strictMono property of the partition).
+-/
+set_option linter.style.longLine false in
+set_option linter.deprecated false in
+set_option linter.style.multiGoal false in
+set_option linter.style.refine false in
+set_option linter.unusedVariables false in
+lemma Partition.abs_crossTermFin_le {a b : ℝ} (π : Partition a b) (f g : ℝ → ℝ)
+    {p q : ℝ} (hp : 1 ≤ p) (hq : 1 ≤ q)
+    (hf : ContinuousOn f (Set.Icc a b)) (hg : ContinuousOn g (Set.Icc a b))
+    (hfp : FinitePVariationOn f (Set.Icc a b) p) (hgq : FinitePVariationOn g (Set.Icc a b) q) :
+    |π.crossTermFin f g| ≤
+      ((List.finRange (π.pts.length - 1)).map (fun i =>
+        (young_control f g p q
+          (π.pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
+          (π.pts.get ⟨i.1 + 1, by omega⟩)) ^ (1 / p + 1 / q))).sum := by
+  generalize_proofs at *;
+  -- Apply the inequality |a * b| ≤ |a|^p * |b|^q for p, q ≥ 1 to each term in the sum.
+  have h_term_bound : ∀ i : Fin (π.pts.length - 1), |(f (π.pts.get ⟨i.1 + 1, by omega⟩) - f (π.pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)) * (g (π.pts.get ⟨i.1 + 1, by omega⟩) - g (π.pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩))| ≤ (young_control f g p q (π.pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩) (π.pts.get ⟨i.1 + 1, by omega⟩)) ^ (1 / p + 1 / q) := by
+    intro i
+    have h_term_bound : |f (π.pts.get ⟨i.1 + 1, by omega⟩) - f (π.pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)| ≤ (pVariationPowOn f (Set.Icc (π.pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩) (π.pts.get ⟨i.1 + 1, by omega⟩)) p).toReal ^ (1 / p) := by
+      apply abs_sub_le_pVariationPowOn_toReal_rpow
+      all_goals generalize_proofs at *;
+      · linarith;
+      · have := π.sorted; simp_all +decide [ List.isChain_iff_get ] ;
+        linarith [ this i ];
+      · simp +zetaDelta at *;
+        have := π.sorted;
+        have := List.isChain_iff_get.mp this;
+        exact le_of_lt ( this ⟨ i, Nat.lt_pred_iff.mpr ‹_› ⟩ );
+      · have := π.sorted;
+        have := List.isChain_iff_get.mp this;
+        exact le_of_lt ( this ⟨ i, Nat.lt_pred_iff.mpr ‹_› ⟩ );
+      · apply_rules [ FinitePVariationOn.subinterval ];
+        · have := π.get_mem_Icc ⟨ i, by linarith ⟩ ; aesop;
+        · exact π.get_mem_Icc _ |>.2
+    have h_term_bound_g : |g (π.pts.get ⟨i.1 + 1, by omega⟩) - g (π.pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)| ≤ (pVariationPowOn g (Set.Icc (π.pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩) (π.pts.get ⟨i.1 + 1, by omega⟩)) q).toReal ^ (1 / q) := by
+      apply_rules [ abs_sub_le_pVariationPowOn_toReal_rpow ]
+      generalize_proofs at *;
+      · have h_sorted : ∀ i j : Fin π.pts.length, i ≤ j → π.pts.get i ≤ π.pts.get j := by
+          exact fun i j hij => by simpa using π.get_strictMono.monotone hij;
+        generalize_proofs at *; (
+        exact ⟨ le_rfl, h_sorted _ _ ( Nat.le_succ _ ) ⟩);
+      · exact ⟨ le_of_lt ( show π.pts.get ⟨ i, Nat.lt_of_lt_of_le i.2 ( Nat.sub_le _ _ ) ⟩ < π.pts.get ⟨ i + 1, by solve_by_elim ⟩ from by
+                            have := π.sorted;
+                            have := List.isChain_iff_getElem.mp this; aesop; ), le_rfl ⟩;
+      · have := π.sorted;
+        have := List.isChain_iff_get.mp this;
+        exact le_of_lt ( this i );
+      · refine' ne_of_lt ( lt_of_le_of_lt _ hgq.lt_top );
+        apply_rules [ pVariationPowOn.mono ];
+        exact Set.Icc_subset_Icc ( by exact le_trans ( by norm_num ) ( Partition.mem_Icc_of_mem_pts π ( by aesop ) |>.1 ) ) ( by exact le_trans ( Partition.mem_Icc_of_mem_pts π ( by aesop ) |>.2 ) ( by norm_num ) )
+    generalize_proofs at *;
+    rw [ abs_mul, Real.rpow_add' ] <;> try positivity
+    generalize_proofs at *; (
+    refine' mul_le_mul ( h_term_bound.trans _ ) ( h_term_bound_g.trans _ ) _ _ <;> norm_num [ young_control ] at * <;> try positivity;
+    · exact Real.rpow_le_rpow ( ENNReal.toReal_nonneg ) ( le_add_of_nonneg_right <| ENNReal.toReal_nonneg ) <| by positivity;
+    · exact Real.rpow_le_rpow ( by exact ENNReal.toReal_nonneg ) ( le_add_of_nonneg_left <| by positivity ) <| by positivity;);
+    exact add_nonneg ( ENNReal.toReal_nonneg ) ( ENNReal.toReal_nonneg );
+  convert Finset.abs_sum_le_sum_abs _ _ |> le_trans <| Finset.sum_le_sum fun i _ => h_term_bound i using 1;
+  any_goals exact Finset.univ;
+  · unfold Partition.crossTermFin; aesop;
+  · exact?
+
+/-
+PROBLEM
+The cross term tends to 0 as the mesh vanishes.
+
+PROVIDED SOLUTION
+Step 1: Rewrite crossTerm as crossTermFin using crossTerm_eq_crossTermFin.
+
+Step 2: Bound |crossTermFin| using abs_crossTermFin_le:
+|crossTermFin(π_n)| ≤ Σᵢ young_control(pts[i], pts[i+1])^(1/p+1/q)
+
+Step 3: Apply sum_rpow_le_max_rpow_mul_sum with θ = 1/p + 1/q (which is > 1 by hpq):
+Σᵢ yc(i)^θ ≤ max(yc(i)^(θ-1)) * Σᵢ yc(i)
+
+But wait, sum_rpow_le_max_rpow_mul_sum bounds (l.map (· ^ θ)).sum ≤ (l.map (· ^ (θ - 1))).foldr max 0 * l.sum, where θ > 1 and l consists of the young_control values.
+
+Step 4: Σᵢ yc(i) ≤ young_control(a,b) by sum_young_control_le.
+
+Step 5: max(yc(i)^(θ-1)) = max(yc(i)^(1/p+1/q-1)) which is exactly the term in omegamax_tendsto_zero, which → 0.
+
+So: |crossTerm(π_n)| ≤ max^(θ-1) * yc(a,b), which → 0 * yc(a,b) = 0.
+
+For the squeeze argument: use squeeze_zero_norm (or squeeze_zero with abs) with the bound from steps 2-5.
+
+The key lemma chain is:
+1. crossTerm_eq_crossTermFin converts crossTerm to crossTermFin
+2. abs_crossTermFin_le bounds |crossTermFin| by sum of yc^(1/p+1/q)
+3. sum_rpow_le_max_rpow_mul_sum converts sum of yc^θ to max^(θ-1) * sum of yc
+4. sum_young_control_le bounds sum of yc by yc(a,b)
+5. omegamax_tendsto_zero (or raw_young_control_max_tendsto_zero + rpow) gives max^(θ-1) → 0
+
+Actually, sum_rpow_le_max_rpow_mul_sum uses List.sum and List.map and List.foldr max 0. The bound from abs_crossTermFin_le also uses List.sum. So I need to connect them.
+
+Let me be more precise: let l = (List.finRange (m-1)).map (fun i => yc(pts[i], pts[i+1])).
+Then abs_crossTermFin_le gives |crossTermFin| ≤ (l.map (· ^ (1/p+1/q))).sum.
+sum_rpow_le_max_rpow_mul_sum gives (l.map (· ^ (1/p+1/q))).sum ≤ (l.map (· ^ (1/p+1/q-1))).foldr max 0 * l.sum, using θ = 1/p+1/q > 1.
+sum_young_control_le gives l.sum ≤ yc(a,b).
+And (l.map (· ^ (1/p+1/q-1))).foldr max 0 is exactly omegamax from omegamax_tendsto_zero, which → 0.
+
+So the final bound: |crossTerm(π_n)| ≤ omegamax(n) * yc(a,b), and omegamax(n) → 0, so use tendsto_nhds_zero_iff or squeeze_zero_norm.
+
+Actually, omegamax_tendsto_zero shows that the foldr max 0 of yc^(1/p+1/q-1) tends to 0. So let me use:
+|crossTerm(π_n)| ≤ omegamax(n) * yc(a,b)
+and omegamax(n) * yc(a,b) → 0 * yc(a,b) = 0.
+
+For the squeeze: use squeeze_zero_norm with the bound, where the upper tends to 0 using Tendsto.mul_const or Tendsto.const_mul.
+-/
+set_option linter.style.longLine false in
+set_option linter.style.multiGoal false in
+lemma crossTerm_tendsto_zero {a b p q : ℝ} (f g : ℝ → ℝ)
+    (hp : 1 ≤ p) (hq : 1 ≤ q) (hpq : 1 / p + 1 / q > 1)
+    (hf : ContinuousOn f (Set.Icc a b)) (hg : ContinuousOn g (Set.Icc a b))
+    (hfp : FinitePVariationOn f (Set.Icc a b) p) (hgq : FinitePVariationOn g (Set.Icc a b) q)
+    (π : ℕ → Partition a b) (hπ : Partition.HasVanishingMeshSize π) :
+    Tendsto (fun n => (π n).crossTerm f g) atTop (𝓝 0) := by
+  -- Apply the squeeze theorem with the bound and the fact that the upper bound tends to 0.
+  have h_squeeze : Filter.Tendsto (fun n => |(π n).crossTermFin f g|) Filter.atTop (nhds 0) := by
+    have h_squeeze : ∀ n, |(π n).crossTermFin f g| ≤ ((List.finRange ((π n).pts.length - 1)).map fun i => (young_control f g p q ((π n).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩) ((π n).pts.get ⟨i.1 + 1, by omega⟩)) ^ (1 / p + 1 / q - 1)).foldr max 0 * (young_control f g p q a b) := by
+      intro n; have := Partition.abs_crossTermFin_le ( π n ) f g hp hq hf hg hfp hgq; simp_all +decide [ List.finRange ] ;
+      refine le_trans this ?_;
+      have h_sum_rpow_le_max_rpow_mul_sum : ∀ {l : List ℝ}, (∀ x ∈ l, 0 ≤ x) → (l.map (· ^ (p⁻¹ + q⁻¹))).sum ≤ (l.map (· ^ (p⁻¹ + q⁻¹ - 1))).foldr max 0 * l.sum := by
+        exact?
+      generalize_proofs at *; (
+      convert h_sum_rpow_le_max_rpow_mul_sum _ |> le_trans <| mul_le_mul_of_nonneg_left ( Partition.sum_young_control_le ( π n ) f g p q hp hq hf hg hfp hgq ) <| ?_ using 1 <;> norm_num [ List.sum_ofFn ] ; ring_nf ; aesop;
+      · exact Or.inl ( by rw [ List.ofFn_eq_map ] ; rfl ) ;
+      · exact fun i => by apply_rules [ Partition.young_control_nonneg ] ;
+      · induction ( List.finRange ( ( π n |> Partition.pts |> List.length ) - 1 ) ) <;> aesop);
+    exact squeeze_zero ( fun _ => abs_nonneg _ ) h_squeeze ( by simpa using Filter.Tendsto.mul ( Partition.omegamax_tendsto_zero f g hp hq hpq hf hg hfp hgq π hπ ) tendsto_const_nhds );
+  exact tendsto_zero_iff_norm_tendsto_zero.mpr ( by simpa only [ Partition.crossTerm_eq_crossTermFin ] using h_squeeze )
+
+/-- Integration by parts for the Young integral: ∫ₐᵇ fdg + ∫ₐᵇ gdf = (f(b) - f(a))(g(b) - g(a)) . -/
 theorem youngIntegral_integration_by_parts {a b p q : ℝ} (f g : ℝ → ℝ)
     (hp : 1 ≤ p) (hq : 1 ≤ q) (hpq : 1 / p + 1 / q > 1)
     (hf : ContinuousOn f (Set.Icc a b)) (hg : ContinuousOn g (Set.Icc a b))
@@ -2354,10 +2620,32 @@ theorem youngIntegral_integration_by_parts {a b p q : ℝ} (f g : ℝ → ℝ)
     youngIntegral f g a b p q hp hq hpq hf hg hfp hgq hab +
       youngIntegral g f a b q p hq hp (by simpa [add_comm] using hpq) hg hf hgq hfp hab =
         f b * g b - f a * g a := by
-  sorry
+  -- Pick a vanishing-mesh sequence
+  obtain ⟨π, hπ⟩ := Partition.exists_vanishing_mesh_sequence a b hab
+  -- The RS sums converge to the Young integrals
+  have hfg :=
+    tendsto_rsSum_nhds_youngIntegral_of_vanishing_mesh f g hp hq hpq hf hg hfp hgq hab π hπ
+  have hgf := tendsto_rsSum_nhds_youngIntegral_of_vanishing_mesh g f hq hp
+    (by simpa [add_comm] using hpq) hg hf hgq hfp hab π hπ
+  -- The cross term tends to 0
+  have hcross := crossTerm_tendsto_zero f g hp hq hpq hf hg hfp hgq π hπ
+  -- By the discrete identity, for each n:
+  -- rsSum(π_n,f,g) + rsSum(π_n,g,f) + crossTerm(π_n) = f(b)*g(b) - f(a)*g(a)
+  have hdiscrete : ∀ n, (π n).rsSum f g + (π n).rsSum g f + (π n).crossTerm f g =
+      f b * g b - f a * g a :=
+    fun n => Partition.rsSum_add_rsSum_add_cross (π n) f g
+  -- Take the limit: the sum of the first two terms converges to the sum of the Young integrals,
+  -- and the third term converges to 0.
+  have hlim : Tendsto (fun n => (π n).rsSum f g + (π n).rsSum g f + (π n).crossTerm f g)
+      atTop (𝓝 (youngIntegral f g a b p q hp hq hpq hf hg hfp hgq hab +
+        youngIntegral g f a b q p hq hp (by simpa [add_comm] using hpq) hg hf hgq hfp hab + 0)) :=
+    (hfg.add hgf).add hcross
+  rw [add_zero] at hlim
+  exact tendsto_nhds_unique hlim (tendsto_const_nhds.congr (fun n => (hdiscrete n).symm))
 
-/-- If `g` is monotone, then the Young integral against `g` agrees with the usual Stieltjes
-integral against the measure associated to `g`. -/
+/-- Compatibility with Stieltjes integral: if `g` is monotone, then the Young integral against `g`
+agrees with the Stieltjes integral against the measure associated to `g`, defined in
+Mathlib.MeasureTheory.Measure.Stieltjes. -/
 theorem youngIntegral_eq_integral_stieltjes_of_monotone {a b p : ℝ} (f g : ℝ → ℝ)
     (hp : 1 ≤ p) (hp1 : 1 / p + 1 / (1 : ℝ) > 1)
     (hf : ContinuousOn f (Set.Icc a b)) (hg : ContinuousOn g (Set.Icc a b))
