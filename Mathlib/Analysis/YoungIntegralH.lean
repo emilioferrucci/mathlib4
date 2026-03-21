@@ -3,7 +3,7 @@ Copyright (c) 2025 Emilio Ferrucci. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Emilio Ferrucci
 -/
-import Mathlib.Topology.EMetricSpace.PVariation
+import PVariation
 import Mathlib.Data.Finset.Sort
 import Mathlib.Analysis.PSeries
 import Mathlib.MeasureTheory.Measure.Stieltjes
@@ -1205,8 +1205,6 @@ lemma partial_sum_step {n : ℕ} (hn : 3 ≤ n) (θ : ℝ) :
   rw [ Real.div_rpow ] <;> try linarith;
   ring_nf
   convert le_refl _
-  change (1 : ℝ) = (Nat.rawCast 1 : ℝ)
-  simp [Nat.rawCast]
 
 /-
 PROBLEM
@@ -2117,7 +2115,7 @@ lemma raw_young_control_max_tendsto_zero {a b p q : ℝ} (f g : ℝ → ℝ)
             ((π n).pts.get ⟨i.1 + 1, by omega⟩)) <;> simp_all
     linarith
   , by
-      change ((List.finRange ((π n).pts.length - 1)).map (fun i =>
+      show ((List.finRange ((π n).pts.length - 1)).map (fun i =>
         young_control f g p q
           ((π n).pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)
           ((π n).pts.get ⟨i.1 + 1, by omega⟩))).foldr max 0 - 0 < ε
@@ -2356,23 +2354,8 @@ Discrete summation-by-parts identity for rsSum.go:
   go(f,g) + go(g,f) + cross(f,g) = f(last)*g(last) - f(x)*g(x)
 
 PROVIDED SOLUTION
-Induction on the list l. Base case: l = [], both sides simplify to 0.
-Inductive step: l = y :: rest. Unfold rsSum.go, rsSum_cross, and List.getLastD at the head.
-The LHS becomes
-  f x * (g y - g x) + go f g y rest + g x * (f y - f x) + go g f y rest +
-    (f y - f x) * (g y - g x) + rsSum_cross f g y rest.
-Group the go and cross terms for the IH:
-  go f g y rest + go g f y rest + rsSum_cross f g y rest =
-    f (rest.getLastD y) * g (rest.getLastD y) - f y * g y.
-Then the remaining terms are
-  f x * (g y - g x) + g x * (f y - f x) + (f y - f x) * (g y - g x) =
-    f y * g y - f x * g x,
-which follows by ring. Combining gives the result. Note: for y :: rest,
-getLastD x = rest.getLastD y.
+Induction on the list l. Base case: l = [], both sides simplify to 0. Inductive step: l = y :: rest. Unfold rsSum.go, rsSum_cross, and List.getLastD at the head. The LHS becomes f x * (g y - g x) + go f g y rest + g x * (f y - f x) + go g f y rest + (f y - f x) * (g y - g x) + rsSum_cross f g y rest. Group the go and cross terms for the IH: go f g y rest + go g f y rest + rsSum_cross f g y rest = f(rest.getLastD y) * g(rest.getLastD y) - f y * g y. Then the remaining terms are f x * (g y - g x) + g x * (f y - f x) + (f y - f x) * (g y - g x) = f y * g y - f x * g x, which follows by ring. Combining gives the result. Note: for y :: rest, getLastD x = rest.getLastD y.
 -/
-set_option linter.style.longLine false in
-set_option linter.unusedSimpArgs false in
-set_option linter.style.multiGoal false in
 lemma rsSum_go_add_go_add_cross (f g : ℝ → ℝ) (x : ℝ) (l : List ℝ) :
     Partition.rsSum.go f g x l + Partition.rsSum.go g f x l + rsSum_cross f g x l =
       f (l.getLastD x) * g (l.getLastD x) - f x * g x := by
@@ -2386,19 +2369,9 @@ PROBLEM
 The rsSum of a partition satisfies the summation-by-parts identity.
 
 PROVIDED SOLUTION
-Unfold rsSum and the match. Case split on π.pts.
-If π.pts = [], then π.first gives head? = some a, contradiction since [].head? = none.
-If π.pts = x :: xs, then rsSum f g = go f g x xs and rsSum g f = go g f x xs and the match gives
-rsSum_cross f g x xs. By rsSum_go_add_go_add_cross,
-  go f g x xs + go g f x xs + rsSum_cross f g x xs =
-    f (xs.getLastD x) * g (xs.getLastD x) - f x * g x.
-From π.first (head? = some a), x = a. From π.last (getLast? = some b), for x :: xs we have
-getLast? = some (xs.getLastD x), so xs.getLastD x = b. Substituting gives
-f b * g b - f a * g a.
+Unfold rsSum and the match. Case split on π.pts. If π.pts = [], then π.first gives head? = some a, contradiction since [].head? = none. If π.pts = x :: xs, then rsSum f g = go f g x xs and rsSum g f = go g f x xs and the match gives rsSum_cross f g x xs. By rsSum_go_add_go_add_cross, go f g x xs + go g f x xs + rsSum_cross f g x xs = f(xs.getLastD x) * g(xs.getLastD x) - f x * g x. From π.first (head? = some a), x = a. From π.last (getLast? = some b), for x :: xs we have getLast? = some (xs.getLastD x), so xs.getLastD x = b. Substituting gives f b * g b - f a * g a.
 -/
-set_option linter.style.longLine false in
-set_option linter.unusedSimpArgs false in
-lemma Partition.rsSum_add_rsSum_add_cross {a b : ℝ} (π : Partition a b) (f g : ℝ → ℝ) :
+lemma Partition.rsSum_add_rsSum_add_cross (π : Partition a b) (f g : ℝ → ℝ) :
     π.rsSum f g + π.rsSum g f + (match π.pts with | [] => 0 | x :: xs => rsSum_cross f g x xs) =
       f b * g b - f a * g a := by
   rcases π with ⟨ pts, hpts ⟩;
@@ -2408,39 +2381,25 @@ lemma Partition.rsSum_add_rsSum_add_cross {a b : ℝ} (π : Partition a b) (f g 
     grind
 
 /-- The cross term for a partition equals rsSum_cross over its points. -/
-def Partition.crossTerm {a b : ℝ} (π : Partition a b) (f g : ℝ → ℝ) : ℝ :=
+def Partition.crossTerm (π : Partition a b) (f g : ℝ → ℝ) : ℝ :=
   match π.pts with | [] => 0 | x :: xs => rsSum_cross f g x xs
 
 /-- Finset-based version of the cross term. -/
-noncomputable def Partition.crossTermFin {a b : ℝ} (π : Partition a b) (f g : ℝ → ℝ) : ℝ :=
+noncomputable def Partition.crossTermFin (π : Partition a b) (f g : ℝ → ℝ) : ℝ :=
   ((List.finRange (π.pts.length - 1)).map (fun i =>
-    (f (π.pts.get ⟨i.1 + 1, by omega⟩) -
-        f (π.pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)) *
-      (g (π.pts.get ⟨i.1 + 1, by omega⟩) -
-        g (π.pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)))).sum
+    (f (π.pts.get ⟨i.1 + 1, by omega⟩) - f (π.pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)) *
+    (g (π.pts.get ⟨i.1 + 1, by omega⟩) - g (π.pts.get ⟨i.1, Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩)))).sum
 
 /-
 PROBLEM
 The list-based and finset-based cross terms are equal.
 
 PROVIDED SOLUTION
-Unfold crossTerm and crossTermFin. The crossTerm matches on π.pts as [] or x :: xs,
-giving rsSum_cross f g x xs. The crossTermFin uses List.finRange (π.pts.length - 1) to index.
-Prove by induction on the list xs, showing that rsSum_cross f g x xs equals the
-finRange-indexed sum. For the base case (xs = []), both are 0. For the cons case
-(xs = y :: rest), rsSum_cross gives
-  (f y - f x) * (g y - g x) + rsSum_cross f g y rest,
-and the finRange sum splits similarly.
+Unfold crossTerm and crossTermFin. The crossTerm matches on π.pts as [] or x :: xs, giving rsSum_cross f g x xs. The crossTermFin uses List.finRange (π.pts.length - 1) to index. Prove by induction on the list xs, showing that rsSum_cross f g x xs equals the finRange-indexed sum. For the base case (xs = []), both are 0. For the cons case (xs = y :: rest), rsSum_cross gives (f y - f x)*(g y - g x) + rsSum_cross f g y rest, and the finRange sum splits similarly.
 
-Actually, the cleanest approach: induction on π.pts.length - 1, or directly unfold both
-definitions and show they agree by matching on π.pts and doing induction on the tail.
-Use the fact that for x :: xs, get ⟨0, _⟩ = x and get ⟨i+1, _⟩ = xs.get ⟨i, _⟩.
+Actually, the cleanest approach: induction on π.pts.length - 1, or directly unfold both definitions and show they agree by matching on π.pts and doing induction on the tail. Use the fact that for x :: xs, get ⟨0, _⟩ = x and get ⟨i+1, _⟩ = xs.get ⟨i, _⟩.
 -/
-set_option linter.style.longLine false in
-set_option linter.unusedSimpArgs false in
-set_option linter.style.multiGoal false in
-set_option linter.style.refine false in
-lemma Partition.crossTerm_eq_crossTermFin {a b : ℝ} (π : Partition a b) (f g : ℝ → ℝ) :
+lemma Partition.crossTerm_eq_crossTermFin (π : Partition a b) (f g : ℝ → ℝ) :
     π.crossTerm f g = π.crossTermFin f g := by
   -- By definition of `rsSum_cross` and `crossTermFin`, we can show that they are equal by induction on the length of the partition's pts.
   have h_eq : ∀ (l : List ℝ), ∀ (x : ℝ), rsSum_cross f g x l = ((List.finRange l.length).map (fun i =>
@@ -2480,12 +2439,7 @@ So product ≤ (A+B)^(1/p) * (A+B)^(1/q) = (A+B)^(1/p+1/q) = young_control^(1/p+
 
 For the p-variation finiteness: pVarPow on subintervals [pts[i], pts[i+1]] is ≤ the global pVarPow on [a,b] which is finite (by hfp and hgq), so it's also finite. For the membership requirements of abs_sub_le_pVariationPowOn_toReal_rpow: pts[i] and pts[i+1] are both in Set.Icc pts[i] pts[i+1] (trivially), and pts[i] ≤ pts[i+1] (from the sorted/strictMono property of the partition).
 -/
-set_option linter.style.longLine false in
-set_option linter.deprecated false in
-set_option linter.style.multiGoal false in
-set_option linter.style.refine false in
-set_option linter.unusedVariables false in
-lemma Partition.abs_crossTermFin_le {a b : ℝ} (π : Partition a b) (f g : ℝ → ℝ)
+lemma Partition.abs_crossTermFin_le (π : Partition a b) (f g : ℝ → ℝ)
     {p q : ℝ} (hp : 1 ≤ p) (hq : 1 ≤ q)
     (hf : ContinuousOn f (Set.Icc a b)) (hg : ContinuousOn g (Set.Icc a b))
     (hfp : FinitePVariationOn f (Set.Icc a b) p) (hgq : FinitePVariationOn g (Set.Icc a b) q) :
@@ -2588,8 +2542,6 @@ and omegamax(n) * yc(a,b) → 0 * yc(a,b) = 0.
 
 For the squeeze: use squeeze_zero_norm with the bound, where the upper tends to 0 using Tendsto.mul_const or Tendsto.const_mul.
 -/
-set_option linter.style.longLine false in
-set_option linter.style.multiGoal false in
 lemma crossTerm_tendsto_zero {a b p q : ℝ} (f g : ℝ → ℝ)
     (hp : 1 ≤ p) (hq : 1 ≤ q) (hpq : 1 / p + 1 / q > 1)
     (hf : ContinuousOn f (Set.Icc a b)) (hg : ContinuousOn g (Set.Icc a b))
@@ -2623,8 +2575,7 @@ theorem youngIntegral_integration_by_parts {a b p q : ℝ} (f g : ℝ → ℝ)
   -- Pick a vanishing-mesh sequence
   obtain ⟨π, hπ⟩ := Partition.exists_vanishing_mesh_sequence a b hab
   -- The RS sums converge to the Young integrals
-  have hfg :=
-    tendsto_rsSum_nhds_youngIntegral_of_vanishing_mesh f g hp hq hpq hf hg hfp hgq hab π hπ
+  have hfg := tendsto_rsSum_nhds_youngIntegral_of_vanishing_mesh f g hp hq hpq hf hg hfp hgq hab π hπ
   have hgf := tendsto_rsSum_nhds_youngIntegral_of_vanishing_mesh g f hq hp
     (by simpa [add_comm] using hpq) hg hf hgq hfp hab π hπ
   -- The cross term tends to 0
@@ -2667,11 +2618,7 @@ sorry
 For a continuous monotone function, the Stieltjes function equals the function itself.
 
 PROVIDED SOLUTION
-The Stieltjes function is defined as Function.rightLim g. By ContinuousWithinAt.rightLim_eq,
-if g is continuous from the right at x, i.e. ContinuousWithinAt g (Set.Ici x) x, then
-rightLim g x = g x. Since g is globally continuous (hg : Continuous g), g is continuous
-from the right at every point x. Specifically, hg.continuousAt gives ContinuousAt g x,
-and ContinuousAt implies ContinuousWithinAt for any set, in particular for Set.Ici x.
+The Stieltjes function is defined as Function.rightLim g. By ContinuousWithinAt.rightLim_eq, if g is continuous from the right at x (i.e., ContinuousWithinAt g (Set.Ici x) x), then rightLim g x = g x. Since g is globally continuous (hg : Continuous g), g is continuous from the right at every point x. Specifically, hg.continuousAt gives ContinuousAt g x, and ContinuousAt implies ContinuousWithinAt for any set, in particular for Set.Ici x.
 -/
 lemma stieltjes_eq_of_continuous {g : ℝ → ℝ} (hmono : Monotone g) (hg : Continuous g) (x : ℝ) :
     hmono.stieltjesFunction x = g x := by
@@ -2686,17 +2633,14 @@ Use MeasureTheory.setIntegral_const: ∫ x in S, c ∂μ = (μ S).toReal • c =
 Then use StieltjesFunction.measure_Ioc: μ_g(Ioc s t) = ENNReal.ofReal(stieltjes(t) - stieltjes(s)).
 By stieltjes_eq_of_continuous: stieltjes(t) = g(t) and stieltjes(s) = g(s).
 So μ_g(Ioc s t) = ENNReal.ofReal(g(t) - g(s)).
-Since g is monotone and s ≤ t, g(t) - g(s) ≥ 0, so
-  (ENNReal.ofReal (g t - g s)).toReal = g t - g s
-by ENNReal.toReal_ofReal applied to a non-negative number.
+Since g is monotone and s ≤ t, g(t) - g(s) ≥ 0, so (ENNReal.ofReal(g(t) - g(s))).toReal = g(t) - g(s) (by ENNReal.toReal_ofReal applied to a non-negative number).
 Therefore ∫ = (g(t) - g(s)) * c = c * (g(t) - g(s)).
 -/
-set_option linter.style.longLine false in
 open MeasureTheory in
 /-- For constant c, ∫ c dμ_g on (s,t] = c * (g(t) - g(s)) when g is continuous and monotone. -/
 lemma setIntegral_const_stieltjes {g : ℝ → ℝ} (hmono : Monotone g) (hg : Continuous g)
     (c : ℝ) {s t : ℝ} (hst : s ≤ t) :
-    ∫ _ in Set.Ioc s t, c ∂(hmono.stieltjesFunction.measure) = c * (g t - g s) := by
+    ∫ x in Set.Ioc s t, c ∂(hmono.stieltjesFunction.measure) = c * (g t - g s) := by
   simp +zetaDelta at *;
   rw [ mul_comm, MeasureTheory.measureReal_def, hmono.stieltjesFunction.measure_Ioc ];
   rw [ stieltjes_eq_of_continuous, stieltjes_eq_of_continuous ] <;> aesop
@@ -2705,27 +2649,270 @@ lemma setIntegral_const_stieltjes {g : ℝ → ℝ} (hmono : Monotone g) (hg : C
 PROVIDED SOLUTION
 By StieltjesFunction.measure_Ioc, μ_g(Ioc a b) = ENNReal.ofReal(stieltjes(b) - stieltjes(a)). By stieltjes_eq_of_continuous, this equals ENNReal.ofReal(g(b) - g(a)). Since g(b) - g(a) is a real number, ENNReal.ofReal of a real number is always < ⊤ (by ENNReal.ofReal_lt_top).
 -/
-set_option linter.style.longLine false in
-set_option linter.unusedVariables false in
 open MeasureTheory in
 /-- The μ_g measure of (a,b] is finite for continuous monotone g. -/
 lemma stieltjes_measure_Ioc_lt_top {g : ℝ → ℝ} (hmono : Monotone g) (hg : Continuous g)
     (a b : ℝ) : hmono.stieltjesFunction.measure (Set.Ioc a b) < ⊤ := by
-  exact?
+  exact measure_Ioc_lt_top
 
-set_option linter.style.longLine false in
 open MeasureTheory in
-/-- The Riemann-Stieltjes sums of f with respect to a continuous monotone g converge
-  to the Lebesgue-Stieltjes integral. -/
+/-- Per-interval RS approximation error: the difference between f(x)*(g(y)-g(x)) and the
+  Stieltjes integral of f on (x,y] is bounded by ε*(g(y)-g(x)) when ‖f(x) - f(t)‖ ≤ ε on (x,y]. -/
+lemma rsSum_interval_error {g : ℝ → ℝ} (hmono : Monotone g) (hg : Continuous g)
+    (f : ℝ → ℝ) {x y : ℝ} (hxy : x ≤ y) (ε : ℝ) (_hε : 0 ≤ ε)
+    (hf_osc : ∀ t ∈ Set.Ioc x y, ‖f x - f t‖ ≤ ε)
+    (hfi : IntegrableOn f (Set.Ioc x y) hmono.stieltjesFunction.measure) :
+    ‖f x * (g y - g x) - ∫ t in Set.Ioc x y, f t ∂(hmono.stieltjesFunction.measure)‖ ≤
+      ε * (g y - g x) := by
+  have h_const_int : IntegrableOn (fun _ => f x) (Set.Ioc x y) hmono.stieltjesFunction.measure :=
+    integrableOn_const (ne_top_of_lt measure_Ioc_lt_top)
+  have h_eq : f x * (g y - g x) - ∫ t in Set.Ioc x y, f t ∂hmono.stieltjesFunction.measure
+    = ∫ t in Set.Ioc x y, (f x - f t) ∂hmono.stieltjesFunction.measure := by
+    rw [← setIntegral_const_stieltjes hmono hg (f x) hxy, ← integral_sub h_const_int hfi]
+  rw [h_eq]
+  calc ‖∫ t in Set.Ioc x y, (f x - f t) ∂hmono.stieltjesFunction.measure‖
+      ≤ ε * hmono.stieltjesFunction.measure.real (Set.Ioc x y) :=
+        norm_setIntegral_le_of_norm_le_const measure_Ioc_lt_top (fun t ht => hf_osc t ht)
+    _ = ε * (g y - g x) := by
+        rw [measureReal_def, hmono.stieltjesFunction.measure_Ioc,
+          stieltjes_eq_of_continuous hmono hg, stieltjes_eq_of_continuous hmono hg,
+          ENNReal.toReal_ofReal (sub_nonneg.mpr (hmono hxy))]
+
+
+-- === HELPERS FOR THE STIELTJES INTEGRAL THEOREM ===
+
+private lemma chain_le_getLastD {x : ℝ} {l : List ℝ} (h : List.IsChain (· < ·) (x :: l)) :
+    x ≤ l.getLastD x := by
+  cases l with
+  | nil => simp [List.getLastD]
+  | cons y rest =>
+    unfold List.getLastD
+    have hxy : x < y := List.IsChain.rel h
+    have : x < (y :: rest).getLast (by simp) := by
+      have hp := h.pairwise; rw [List.pairwise_cons] at hp
+      rcases hp with ⟨hall, _⟩
+      by_cases hrest : rest = []
+      · subst hrest; simp; exact hxy
+      · rw [List.getLast_cons hrest]
+        exact hall _ (List.mem_cons_of_mem y (List.getLast_mem hrest))
+    linarith
+
+private lemma getLastD_cons_eq (x y : ℝ) (l : List ℝ) :
+    (y :: l).getLastD x = l.getLastD y := by
+  unfold List.getLastD
+  cases l with
+  | nil => simp
+  | cons z ws => simp [List.getLast_cons]
+
+private lemma Ioc_disjoint_adjacent (x y z : ℝ) :
+    Disjoint (Set.Ioc x y) (Set.Ioc y z) :=
+  Set.Ioc_disjoint_Ioc.mpr (by simp)
+
+private noncomputable def maxGap (x : ℝ) : List ℝ → ℝ
+  | [] => 0
+  | y :: rest => max (y - x) (maxGap y rest)
+
+private lemma maxGap_cons_le {x y : ℝ} {rest : List ℝ} {δ : ℝ} (h : maxGap x (y :: rest) ≤ δ) :
+    y - x ≤ δ ∧ maxGap y rest ≤ δ := by
+  unfold maxGap at h
+  exact ⟨le_trans (le_max_left _ _) h, le_trans (le_max_right _ _) h⟩
+
+-- Partition infrastructure
+private lemma Partition.rsSum_eq_go {a b : ℝ} (π : Partition a b) (f g : ℝ → ℝ) :
+    π.rsSum f g = Partition.rsSum.go f g a π.pts.tail := by
+  unfold Partition.rsSum
+  rcases h : π.pts with _ | ⟨x, xs⟩
+  · have := π.first; rw [h] at this; simp at this
+  · have := π.first; rw [h] at this; simp at this; subst this; rfl
+
+/-
+PROVIDED SOLUTION
+Case split on π.pts. If empty, contradiction with first. If a :: xs, use first to get head = a. Then from π.last: getLast? (a :: xs) = some b. For xs, xs.getLastD a equals b. If xs = [], then getLast? (a :: []) = some a, so a = b, and [].getLastD a = a = b. If xs = y :: ys, then getLast? (a :: y :: ys) = getLast? (y :: ys), and (y :: ys).getLastD a = (y :: ys).getLast (by simp). From getLast? = some b, we get getLast = b.
+-/
+private lemma Partition.getLastD_tail {a b : ℝ} (π : Partition a b) :
+    π.pts.tail.getLastD a = b := by
+  rcases n : π.pts with ( _ | ⟨ x, _ | ⟨ y, l ⟩ ⟩ ) <;> simp_all +decide [ List.getLast? ];
+  · have := π.pts_ne_nil; aesop;
+  · cases π ; aesop;
+  · convert π.last using 1;
+    rw [ n ] ; simp +decide [ List.getLast? ] ;
+
+private lemma Partition.chain_tail {a b : ℝ} (π : Partition a b) :
+    List.IsChain (· < ·) (a :: π.pts.tail) := by
+  rcases h : π.pts with _ | ⟨x, xs⟩
+  · have := π.first; rw [h] at this; simp at this
+  · have hf := π.first; rw [h] at hf; simp at hf; subst hf
+    have := π.sorted; rw [h] at this; exact this
+
+/-
+PROVIDED SOLUTION
+By induction on π.pts.tail. The mesh is the foldr max 0 of the consecutive gaps. maxGap computes the same thing recursively. They should be equal or maxGap ≤ mesh.
+
+Partition.mesh π is defined as:
+  ((List.finRange (π.pts.length - 1)).map fun i =>
+    π.pts.get ⟨i.1 + 1, _⟩ - π.pts.get ⟨i.1, _⟩).foldr max 0
+
+maxGap x l computes the max of consecutive differences recursively.
+
+Both compute the maximum of consecutive gaps in the list π.pts = a :: π.pts.tail.
+
+Proof: by induction on π.pts.tail, showing that maxGap computes the same maximum as the mesh definition. For each consecutive pair in the list, the gap appears in both the maxGap recursion and the mesh's finRange map.
+-/
+private lemma Partition.maxGap_le_mesh {a b : ℝ} (π : Partition a b) :
+    maxGap a π.pts.tail ≤ π.mesh := by
+  -- By definition of maxGap, it is the maximum of the differences between consecutive elements in the list.
+  have h_maxGap_def : maxGap a π.pts.tail = List.foldr (fun x y => max x y) 0 (List.map (fun i => π.pts.get ⟨i.1 + 1, by omega⟩ - π.pts.get ⟨i.1, by exact Nat.lt_of_lt_of_le i.2 (Nat.sub_le _ _)⟩) (List.finRange (π.pts.length - 1))) := by
+    -- Apply the definition of `maxGap` to rewrite the goal.
+    have h_maxGap_def : ∀ {x y : ℝ} {l : List ℝ}, List.IsChain (· < ·) (x :: y :: l) → maxGap x (y :: l) = max (y - x) (maxGap y l) := by
+      exact?
+    generalize_proofs at *; (
+    -- By induction on the length of π.pts.tail, we can show that maxGap a π.pts.tail equals the foldr max 0 of the list of differences.
+    have h_ind : ∀ {l : List ℝ}, List.IsChain (· < ·) l → maxGap l.head! l.tail = List.foldr (fun x y => max x y) 0 (List.map (fun i => l.get ⟨i.1 + 1, by omega⟩ - l.get ⟨i.1, by omega⟩) (List.finRange (l.length - 1))) := by
+      intro l hl; induction l <;> simp_all +decide [ List.finRange_succ ] ; (
+      exact?);
+      cases ‹List ℝ› <;> simp_all +decide [ List.finRange_succ ] ; (
+      exact?);
+      congr! 3
+    generalize_proofs at *; (
+    convert h_ind _;
+    · -- By definition of `Partition`, the first element of `pts` is `a`.
+      have h_head : π.pts.head! = a := by
+        have h_pts : π.pts.head? = some a := by
+          exact?
+        cases h : π.pts <;> aesop ( simp_config := { singlePass := true } ) ;
+      generalize_proofs at *; (exact h_head.symm);
+    · exact π.sorted));
+  convert le_rfl
+
+private lemma Partition.pts_mem_Icc {a b : ℝ} (π : Partition a b) :
+    ∀ x ∈ π.pts.tail, x ∈ Set.Icc a b := by
+  intro x hx; exact π.mem_Icc_of_mem_pts (List.mem_of_mem_tail hx)
+
+set_option maxHeartbeats 400000 in
+open MeasureTheory in
+private lemma rsSum_go_sub_integral_le_delta (f g : ℝ → ℝ)
+    (hmono : Monotone g) (hg : Continuous g)
+    (ε : ℝ) (hε : 0 ≤ ε) (δ : ℝ)
+    (x : ℝ) (l : List ℝ)
+    (hchain : List.IsChain (· < ·) (x :: l))
+    (hgaps : maxGap x l ≤ δ)
+    (hf_osc : ∀ s t, s ∈ x :: l → x ≤ t → t ≤ l.getLastD x →
+      |s - t| ≤ δ → ‖f s - f t‖ ≤ ε)
+    (hfi : IntegrableOn f (Set.Ioc x (l.getLastD x)) hmono.stieltjesFunction.measure) :
+    ‖Partition.rsSum.go f g x l -
+      ∫ t in Set.Ioc x (l.getLastD x), f t ∂(hmono.stieltjesFunction.measure)‖ ≤
+      ε * (g (l.getLastD x) - g x) := by
+  induction l generalizing x with
+  | nil =>
+    simp [Partition.rsSum.go, List.getLastD]
+  | cons y rest ih =>
+    rw [getLastD_cons_eq] at hf_osc hfi ⊢
+    have hxy : x < y := List.IsChain.rel hchain
+    have hyz : y ≤ rest.getLastD y := chain_le_getLastD hchain.tail
+    have ⟨hgap1, hgap2⟩ := maxGap_cons_le hgaps
+    set z := rest.getLastD y
+    show ‖f x * (g y - g x) + Partition.rsSum.go f g y rest -
+      ∫ t in Set.Ioc x z, f t ∂hmono.stieltjesFunction.measure‖ ≤ ε * (g z - g x)
+    -- Split the integral
+    have h_split : ∫ t in Set.Ioc x z, f t ∂hmono.stieltjesFunction.measure =
+        (∫ t in Set.Ioc x y, f t ∂hmono.stieltjesFunction.measure) +
+        (∫ t in Set.Ioc y z, f t ∂hmono.stieltjesFunction.measure) := by
+      rw [← Set.Ioc_union_Ioc_eq_Ioc hxy.le hyz]
+      exact MeasureTheory.setIntegral_union (Ioc_disjoint_adjacent x y z) measurableSet_Ioc
+        (hfi.mono_set (Set.Ioc_subset_Ioc_right hyz))
+        (hfi.mono_set (Set.Ioc_subset_Ioc_left hxy.le))
+    rw [h_split]
+    -- Triangle inequality
+    have h1 : ‖f x * (g y - g x) - ∫ t in Set.Ioc x y, f t ∂hmono.stieltjesFunction.measure‖ ≤
+        ε * (g y - g x) := by
+      apply rsSum_interval_error hmono hg f hxy.le ε hε
+      · intro t ht
+        have : |x - t| ≤ δ := by
+          rw [abs_of_nonpos (by linarith [ht.1])]; linarith [ht.2, hgap1]
+        exact hf_osc x t (by simp) ht.1.le (le_trans ht.2 hyz) this
+      · exact hfi.mono_set (Set.Ioc_subset_Ioc_right hyz)
+    have h2 : ‖Partition.rsSum.go f g y rest -
+        ∫ t in Set.Ioc y z, f t ∂hmono.stieltjesFunction.measure‖ ≤ ε * (g z - g y) := by
+      refine ih y hchain.tail hgap2 ?_ ?_
+      · intro s t hs ht1 ht2 ht3
+        exact hf_osc s t (List.mem_cons_of_mem x hs) (le_trans hxy.le ht1) ht2 ht3
+      · exact hfi.mono_set (Set.Ioc_subset_Ioc_left hxy.le)
+    calc ‖f x * (g y - g x) + Partition.rsSum.go f g y rest -
+          ((∫ t in Set.Ioc x y, f t ∂hmono.stieltjesFunction.measure) +
+          (∫ t in Set.Ioc y z, f t ∂hmono.stieltjesFunction.measure))‖
+        = ‖(f x * (g y - g x) - ∫ t in Set.Ioc x y, f t ∂hmono.stieltjesFunction.measure) +
+          (Partition.rsSum.go f g y rest - ∫ t in Set.Ioc y z, f t ∂hmono.stieltjesFunction.measure)‖ := by
+          congr 1; ring
+      _ ≤ ‖f x * (g y - g x) - ∫ t in Set.Ioc x y, f t ∂hmono.stieltjesFunction.measure‖ +
+          ‖Partition.rsSum.go f g y rest - ∫ t in Set.Ioc y z, f t ∂hmono.stieltjesFunction.measure‖ :=
+          norm_add_le _ _
+      _ ≤ ε * (g y - g x) + ε * (g z - g y) := add_le_add h1 h2
+      _ = ε * (g z - g x) := by ring
+
+open MeasureTheory in
 lemma tendsto_rsSum_setIntegral_stieltjes {a b : ℝ} (f g : ℝ → ℝ)
     (hf : ContinuousOn f (Set.Icc a b)) (hg : Continuous g)
     (hmono : Monotone g) (hab : a ≤ b)
     (π : ℕ → Partition a b) (hπ : Partition.HasVanishingMeshSize π) :
     Tendsto (fun n => (π n).rsSum f g) atTop
       (𝓝 (∫ x in Set.Ioc a b, f x ∂(hmono.stieltjesFunction.measure))) := by
-  sorry
+  have hfi : IntegrableOn f (Set.Ioc a b) hmono.stieltjesFunction.measure :=
+    (hf.integrableOn_compact isCompact_Icc).mono_set Set.Ioc_subset_Icc_self
+  have huc := IsCompact.uniformContinuousOn_of_continuous isCompact_Icc hf
+  rw [Metric.tendsto_atTop]
+  intro ε hε
+  -- Get ε' and δ from uniform continuity
+  set ε' := ε / (g b - g a + 1) with hε'_def
+  have hgba : 0 ≤ g b - g a := sub_nonneg.mpr (hmono hab)
+  have hε' : 0 < ε' := div_pos hε (by linarith)
+  obtain ⟨δ', hδ', hδf'⟩ := Metric.uniformContinuousOn_iff.mp huc ε' hε'
+  set δ := δ' / 2 with hδ_def
+  have hδ : 0 < δ := by positivity
+  have hδf : ∀ s ∈ Set.Icc a b, ∀ t ∈ Set.Icc a b, |s - t| ≤ δ → ‖f s - f t‖ ≤ ε' := by
+    intro s hs t ht hst
+    exact le_of_lt (hδf' s hs t ht (by rw [Real.dist_eq]; linarith))
+  -- Get N from vanishing mesh
+  obtain ⟨N, hN⟩ := Filter.eventually_atTop.mp (hπ.eventually (gt_mem_nhds hδ))
+  use N
+  intro n hn
+  -- Rewrite rsSum
+  rw [Real.dist_eq, show (π n).rsSum f g = Partition.rsSum.go f g a (π n).pts.tail from
+    Partition.rsSum_eq_go (π n) f g]
+  -- Apply the bound
+  have h_last : (π n).pts.tail.getLastD a = b := Partition.getLastD_tail (π n)
+  have h_bound : ‖Partition.rsSum.go f g a (π n).pts.tail -
+        ∫ x in Set.Ioc a b, f x ∂hmono.stieltjesFunction.measure‖ ≤ ε' * (g b - g a) := by
+    have h1 := rsSum_go_sub_integral_le_delta f g hmono hg ε' hε'.le δ a (π n).pts.tail
+      (Partition.chain_tail (π n))
+      (le_trans (Partition.maxGap_le_mesh (π n)) (le_of_lt (hN n hn)))
+      (fun s t hs ht1 ht2 ht3 => by
+        have hs_mem : s ∈ Set.Icc a b := by
+          rcases List.mem_cons.mp hs with rfl | hs
+          · exact ⟨le_rfl, hab⟩
+          · exact (π n).mem_Icc_of_mem_pts (List.mem_of_mem_tail hs)
+        rw [h_last] at ht2
+        have ht_mem : t ∈ Set.Icc a b := ⟨ht1, ht2⟩
+        exact hδf s hs_mem t ht_mem ht3)
+      (by rw [h_last]; exact hfi)
+    rw [h_last] at h1; exact h1
+  have hgba_pos : 0 < g b - g a + 1 := by linarith
+  calc |Partition.rsSum.go f g a (π n).pts.tail -
+        ∫ x in Set.Ioc a b, f x ∂hmono.stieltjesFunction.measure|
+      = ‖Partition.rsSum.go f g a (π n).pts.tail -
+        ∫ x in Set.Ioc a b, f x ∂hmono.stieltjesFunction.measure‖ := (Real.norm_eq_abs _).symm
+    _ ≤ ε' * (g b - g a) := h_bound
+    _ = ε / (g b - g a + 1) * (g b - g a) := rfl
+    _ < ε := by
+        by_cases h0 : g b - g a = 0
+        · rw [h0, mul_zero]; exact hε
+        · have hgba_lt : 0 < g b - g a := lt_of_le_of_ne hgba (Ne.symm h0)
+          calc ε / (g b - g a + 1) * (g b - g a)
+            = ε * (g b - g a) / (g b - g a + 1) := by ring
+            _ < ε * (g b - g a + 1) / (g b - g a + 1) := by
+                apply div_lt_div_of_pos_right (by nlinarith) hgba_pos
+            _ = ε := by field_simp
 
-set_option linter.style.longFile 2800 in
+set_option linter.style.longFile 3100 in
 theorem youngIntegral_eq_integral_stieltjes_of_monotone {a b p : ℝ} (f g : ℝ → ℝ)
     (hp : 1 ≤ p) (hp1 : 1 / p + 1 / (1 : ℝ) > 1)
     (hf : ContinuousOn f (Set.Icc a b))
@@ -2734,7 +2921,6 @@ theorem youngIntegral_eq_integral_stieltjes_of_monotone {a b p : ℝ} (f g : ℝ
     (hg1 : FinitePVariationOn g (Set.Icc a b) 1) (hmono : Monotone g) (hab : a ≤ b) :
     youngIntegral f g a b p 1 hp le_rfl hp1 hf (hg_cont.continuousOn) hfp hg1 hab =
       ∫ x in Set.Ioc a b, f x ∂(hmono.stieltjesFunction.measure) := by
-  -- Both the Young integral and the Stieltjes integral are limits of the same RS sums.
   obtain ⟨π, hπ⟩ := Partition.exists_vanishing_mesh_sequence a b hab
   have h1 := tendsto_rsSum_nhds_youngIntegral_of_vanishing_mesh f g hp le_rfl hp1
     hf hg_cont.continuousOn hfp hg1 hab π hπ
