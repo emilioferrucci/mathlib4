@@ -457,7 +457,7 @@ NODE_STYLE_BY_PREFIX = {
     "str:": {"shape": "box", "color": "black", "style": '"rounded,filled"', "fillcolor": "#e8f0ff"},
     "inst:": {"shape": "box", "color": "black", "style": '"rounded,filled"', "fillcolor": "#e8f0ff"},
     "lem:": {"shape": "ellipse", "color": "black", "style": "filled", "fillcolor": "#fff2cc"},
-    "thm:": {"shape": "hexagon", "color": "black", "style": "filled", "fillcolor": "#f4cccc"},
+    "thm:": {"shape": "ellipse", "color": "black", "style": "filled", "fillcolor": "#f4cccc"},
 }
 
 
